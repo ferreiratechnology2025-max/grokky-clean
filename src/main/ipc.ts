@@ -1,6 +1,7 @@
 import { dialog, ipcMain, shell } from "electron";
 import type { MainController } from "./controller";
 import { IPC } from "../shared/contracts";
+import { registerWebPreviewIpc } from "./web-preview";
 import {
   requireComputerAccessLevel,
   requireComputerApprovalDecision,
@@ -16,6 +17,7 @@ import {
 } from "../shared/validation";
 
 export function registerIpc(controller: MainController): void {
+  registerWebPreviewIpc((conversationId) => controller.snapshot().conversations.find((item) => item.id === conversationId)?.workingDirectory);
   ipcMain.handle(IPC.snapshotGet, () => controller.snapshot());
   ipcMain.handle(IPC.conversationCreate, () => controller.createConversation());
   ipcMain.handle(IPC.conversationActivate, (_event, conversationId) => controller.setActiveConversation(requireId(conversationId, "conversation ID")));

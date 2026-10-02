@@ -5,6 +5,7 @@ import { MainController } from "./controller";
 import { ComputerAccessService } from "./computer-access";
 import { createElectronComputerHost, createElectronComputerSecrets } from "./computer-host-electron";
 import { registerIpc } from "./ipc";
+import { stopWebPreview } from "./web-preview";
 import { StateStore } from "./state-store";
 import { IPC } from "../shared/contracts";
 
@@ -43,6 +44,7 @@ async function createWindow(controller: MainController): Promise<void> {
     if (url !== mainWindow?.webContents.getURL()) event.preventDefault();
   });
 
+  mainWindow.on("closed", () => void stopWebPreview());
   controller.attachWindow(mainWindow);
   mainWindow.once("ready-to-show", () => mainWindow?.show());
   if (process.env.ELECTRON_RENDERER_URL) await mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL);
@@ -685,6 +687,8 @@ app.whenReady().then(async () => {
     if (BrowserWindow.getAllWindows().length === 0) void createWindow(controller);
   });
 });
+
+app.on("before-quit", () => void stopWebPreview());
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();

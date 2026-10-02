@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from "electron";
 import type { AppSnapshot, AppSettings, ConversationPatch, GrokkyApi } from "../shared/contracts";
 import { IPC } from "../shared/contracts";
 import { userFacingError } from "../shared/errors";
+import { PREVIEW_IPC, type WebPreviewApi } from "../main/web-preview-contract";
 
 let snapshotListener: ((_event: Electron.IpcRendererEvent, snapshot: AppSnapshot) => void) | undefined;
 
@@ -13,7 +14,7 @@ async function invoke<T>(channel: string, ...args: unknown[]): Promise<T> {
   }
 }
 
-const api: GrokkyApi = {
+const api: GrokkyApi & WebPreviewApi = {
   getSnapshot: () => invoke(IPC.snapshotGet),
   createConversation: () => invoke(IPC.conversationCreate),
   setActiveConversation: (conversationId) => invoke(IPC.conversationActivate, conversationId),
@@ -43,6 +44,9 @@ const api: GrokkyApi = {
   updateComputerNetworkAllowlist: (domains) => invoke(IPC.computerNetworkAllowlist, domains),
   resolveComputerApproval: (id, decision) => invoke(IPC.computerApprovalResolve, id, decision),
   openExternal: (url) => invoke(IPC.externalOpen, url),
+  previewStatus: (conversationId) => invoke(PREVIEW_IPC.status, conversationId),
+  previewStart: (conversationId) => invoke(PREVIEW_IPC.start, conversationId),
+  previewStop: () => invoke(PREVIEW_IPC.stop),
   onSnapshot: (listener: (snapshot: AppSnapshot) => void) => {
     if (snapshotListener) ipcRenderer.removeListener(IPC.snapshotChanged, snapshotListener);
     snapshotListener = (_event: Electron.IpcRendererEvent, snapshot: AppSnapshot) => listener(snapshot);

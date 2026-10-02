@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
+  ArrowClockwise,
   ArrowLeft,
   ArrowRight,
   ArrowUpRight,
@@ -1598,6 +1599,9 @@ export function App() {
   const [pendingDelete, setPendingDelete] = useState<{ id: string; title: string } | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [approvalBusy, setApprovalBusy] = useState(false);
+  const [previewAvailable, setPreviewAvailable] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewReload, setPreviewReload] = useState(0);
 
   useEffect(() => {
     void window.grokky.getSnapshot().then(setSnapshot).catch((error) => setUiError(error.message));
@@ -1621,6 +1625,42 @@ export function App() {
   }, [snapshot?.activeConversationId, activeWorkingDirectory]);
 
   const active = snapshot?.conversations.find((item) => item.id === snapshot.activeConversationId) ?? snapshot?.conversations[0];
+  const previewConversationId = active?.id;
+  const previewStatus = active?.status;
+  const previewDirectory = active?.workingDirectory;
+
+  // Detection without polling: on opening a conversation and when a run ends.
+  useEffect(() => {
+    if (!previewConversationId || previewStatus === "running") return;
+    let cancelled = false;
+    void window.grokky.previewStatus(previewConversationId)
+      .then((result) => { if (!cancelled) setPreviewAvailable(result.available); })
+      .catch(() => { if (!cancelled) setPreviewAvailable(false); });
+    return () => { cancelled = true; };
+  }, [previewConversationId, previewStatus, previewDirectory]);
+
+  // The preview server lives only while its panel is open for this conversation.
+  useEffect(() => {
+    setPreviewUrl(null);
+    void window.grokky.previewStop().catch(() => undefined);
+    return () => { void window.grokky.previewStop().catch(() => undefined); };
+  }, [previewConversationId]);
+
+  async function togglePreview() {
+    if (!active) return;
+    if (previewUrl) {
+      setPreviewUrl(null);
+      await window.grokky.previewStop().catch(() => undefined);
+      return;
+    }
+    try {
+      const result = await window.grokky.previewStart(active.id);
+      setPreviewReload(0);
+      setPreviewUrl(result.url);
+    } catch (error) {
+      setUiError(error instanceof Error ? error.message : t("preview.failed"));
+    }
+  }
   const filtered = useMemo(() => snapshot?.conversations.filter((item) => item.title.toLowerCase().includes(search.toLowerCase())) ?? [], [snapshot?.conversations, search]);
 
   if (!snapshot || !active) {
@@ -1748,6 +1788,7 @@ export function App() {
               </div>
             </div>
             <div className="toolbar-actions" aria-label={t("hdr.sessionActions")}>
+              {(previewAvailable || previewUrl) && <button className={`preview-button ${previewUrl ? "open" : ""}`} type="button" aria-pressed={Boolean(previewUrl)} data-tooltip={t("preview.title")} aria-label={t("preview.title")} onClick={() => void togglePreview()}><Eye size={16} weight="duotone" /><span>{t("preview.button")}</span></button>}
               <button className={`icon-button computer-toolbar ${snapshot.computerAccess.enabled && activeDevice?.status === "online" ? "connected" : ""}`} data-tooltip={snapshot.computerAccess.enabled ? t("hdr.computerName", { name: activeDevice?.name || t("hdr.unavailable") }) : t("hdr.computerOff")} aria-label={snapshot.computerAccess.enabled ? t("hdr.computerName", { name: activeDevice?.name || t("hdr.unavailable") }) : t("hdr.computerOff")} type="button" onClick={() => setSettingsTab("computer")}><DesktopTower size={17} weight="duotone" /></button>
               {!activeStatus?.ready && <button className="icon-button setup-warning" data-tooltip={tr(activeStatus?.detail ?? "") || t("hdr.providerNeedsSetup")} aria-label={tr(activeStatus?.detail ?? "") || t("hdr.providerNeedsSetup")} type="button" onClick={() => setSettingsTab("session")}><WarningCircle size={17} /></button>}
               <button className="icon-button" data-tooltip={t("hdr.sessionSettings")} aria-label={t("hdr.sessionSettings")} type="button" onClick={() => setSettingsTab("session")}><GearSix size={17} /></button>
@@ -1756,8 +1797,19 @@ export function App() {
           </div>
         </header>
 
-        <MessageList conversation={active} agents={agents} />
-        <Composer conversation={active} agents={agents} recentDirectories={snapshot.settings.recentWorkingDirectories} multiAgentEnabled={snapshot.settings.multiAgentEnabled} maxAgents={snapshot.settings.maxAgentThreads} webSearchEnabled={snapshot.settings.webSearchEnabled} onOpenAgents={() => setSettingsTab("agents")} onError={setUiError} />
+        <div className={`workspace-body ${previewUrl ? "with-preview" : ""}`}>
+          <MessageList conversation={active} agents={agents} />
+          {previewUrl && (
+            <section className="preview-panel" aria-label={t("preview.title")}>
+              <header className="preview-panel-bar">
+                <strong>{t("preview.title")}</strong>
+                <button className="icon-button" type="button" data-tooltip={t("preview.reload")} aria-label={t("preview.reload")} onClick={() => setPreviewReload((value) => value + 1)}><ArrowClockwise size={16} /></button>
+                <button className="icon-button" type="button" data-tooltip={t("preview.close")} aria-label={t("preview.close")} onClick={() => void togglePreview()}><X size={16} /></button>
+              </header>
+              <iframe key={previewReload} className="preview-frame" src={previewUrl} title={t("preview.title")} sandbox="allow-scripts" />
+            </section>
+          )}
+        </div>        <Composer conversation={active} agents={agents} recentDirectories={snapshot.settings.recentWorkingDirectories} multiAgentEnabled={snapshot.settings.multiAgentEnabled} maxAgents={snapshot.settings.maxAgentThreads} webSearchEnabled={snapshot.settings.webSearchEnabled} onOpenAgents={() => setSettingsTab("agents")} onError={setUiError} />
       </main>
 
       {settingsTab && <SettingsDialog snapshot={snapshot} conversation={active} agents={agents} initialTab={settingsTab} onAgentsChange={setAgents} onClose={() => setSettingsTab(null)} onError={setUiError} />}
