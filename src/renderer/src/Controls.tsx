@@ -1,5 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { CaretDown, Check, MagnifyingGlass } from "@phosphor-icons/react";
+import { t, tr, useStrings } from "./i18n/useStrings";
 
 export interface SelectChoice<T extends string | number> {
   value: T;
@@ -22,6 +23,7 @@ export function SelectMenu<T extends string | number>({
   compact?: boolean;
   onChange(value: T): void;
 }) {
+  useStrings();
   const [open, setOpen] = useState(false);
   const [opensUp, setOpensUp] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -70,18 +72,18 @@ export function SelectMenu<T extends string | number>({
         ref={buttonRef}
         className="select-menu-trigger"
         type="button"
-        aria-label={label}
+        aria-label={tr(label)}
         aria-haspopup="listbox"
         aria-controls={listId}
         aria-expanded={open}
         disabled={disabled}
         onClick={toggle}
       >
-        <span>{selected?.label ?? String(value)}</span>
+        <span>{selected ? tr(selected.label) : String(value)}</span>
         <CaretDown size={13} weight="bold" />
       </button>
       {open && (
-        <div className="select-menu-popover" id={listId} role="listbox" aria-label={label}>
+        <div className="select-menu-popover" id={listId} role="listbox" aria-label={tr(label)}>
           {choices.map((choice) => {
             const active = choice.value === value;
             return (
@@ -109,7 +111,7 @@ export function SelectMenu<T extends string | number>({
                   if (event.key === "End") { event.preventDefault(); optionRefs.current[choices.length - 1]?.focus(); }
                 }}
               >
-                <span><strong>{choice.label}</strong>{choice.detail && <small>{choice.detail}</small>}</span>
+                <span><strong>{tr(choice.label)}</strong>{choice.detail && <small>{tr(choice.detail)}</small>}</span>
                 {active && <Check size={14} weight="bold" />}
               </button>
             );
@@ -133,6 +135,7 @@ export function ModelCombobox({
   disabled?: boolean;
   onCommit(value: string): void;
 }) {
+  useStrings();
   const [draft, setDraft] = useState(value);
   const [open, setOpen] = useState(false);
   const [opensUp, setOpensUp] = useState(false);
@@ -170,7 +173,7 @@ export function ModelCombobox({
         ref={inputRef}
         value={draft}
         disabled={disabled}
-        aria-label={label}
+        aria-label={tr(label)}
         aria-autocomplete="list"
         aria-controls={listId}
         aria-expanded={open}
@@ -188,15 +191,15 @@ export function ModelCombobox({
       />
       <CaretDown size={13} weight="bold" aria-hidden="true" />
       {open && (
-        <div className="model-combobox-popover" id={listId} role="listbox" aria-label="Suggested models">
-          <div className="model-search-label"><MagnifyingGlass size={13} />Choose a model or enter its OpenRouter ID</div>
+        <div className="model-combobox-popover" id={listId} role="listbox" aria-label={t("models.suggested")}>
+          <div className="model-search-label"><MagnifyingGlass size={13} />{t("models.hint")}</div>
           {filtered.slice(0, 8).map((suggestion) => (
             <button key={suggestion} type="button" role="option" aria-selected={suggestion === value} onClick={() => { setDraft(suggestion); commit(suggestion); }}>
               <span>{suggestion}</span>
               {suggestion === value && <Check size={14} weight="bold" />}
             </button>
           ))}
-          {!filtered.length && <div className="model-combobox-empty">Press Enter to use “{draft.trim()}”</div>}
+          {!filtered.length && <div className="model-combobox-empty">{t("models.pressEnter", { value: draft.trim() })}</div>}
         </div>
       )}
     </div>

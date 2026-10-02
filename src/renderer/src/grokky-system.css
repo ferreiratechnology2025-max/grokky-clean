@@ -175,7 +175,7 @@ summary:focus-visible,
   position: absolute;
   top: 5px;
   left: 11px;
-  content: "Recent runs";
+  content: attr(data-label);
   color: var(--text-faint);
   font-size: 9px;
   font-weight: 630;

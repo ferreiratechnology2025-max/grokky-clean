@@ -65,6 +65,7 @@ import { botVariantAt, botVariantForIdentity, type BotVariant } from "./bot-iden
 import { ModelCombobox, SelectMenu, type SelectChoice } from "./Controls";
 import { activitiesForDisplay, type DisplayActivity } from "./activity-display";
 import { crewRunsForDisplay, crewRunStage, groupCrewCommunications } from "./crew-display";
+import { getLanguage, setLanguage, t, tn, tr, useStrings, type UiLanguage } from "./i18n/useStrings";
 
 const OPENROUTER_SUGGESTIONS = [
   "openai/gpt-5.2",
@@ -105,10 +106,15 @@ const COMPUTER_ACCESS_CHOICES: Array<SelectChoice<ComputerAccessLevel>> = [
   { value: "ask", label: "Ask each time", detail: "Pause for your approval" },
   { value: "allow", label: "Always allow", detail: "Allow within the configured boundary" },
 ];
-const MAX_AGENT_CHOICES: Array<SelectChoice<number>> = Array.from({ length: 8 }, (_, index) => ({
-  value: index + 1,
-  label: `${index + 1} ${index === 0 ? "worker" : "workers"}`,
-}));
+function languageChoices(): Array<SelectChoice<UiLanguage>> {
+  return [
+    { value: "pt-BR", label: t("lang.pt") },
+    { value: "en", label: t("lang.en") },
+  ];
+}
+function maxAgentChoices(): Array<SelectChoice<number>> {
+  return Array.from({ length: 8 }, (_, index) => ({ value: index + 1, label: tn("choice.worker", index + 1) }));
+}
 const THEME_CHOICES: Array<SelectChoice<AppSnapshot["settings"]["theme"]>> = [
   { value: "system", label: "Follow system", detail: "Match your operating system automatically" },
   { value: "dark", label: "Dark", detail: "Grokky's cinematic workspace" },
@@ -260,8 +266,8 @@ function conversationMood(conversation: Conversation): BotMood {
 function timeLabel(timestamp: number): string {
   const date = new Date(timestamp);
   const today = new Date();
-  if (date.toDateString() === today.toDateString()) return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-  return date.toLocaleDateString([], { month: "short", day: "numeric" });
+  if (date.toDateString() === today.toDateString()) return date.toLocaleTimeString(getLanguage(), { hour: "numeric", minute: "2-digit" });
+  return date.toLocaleDateString(getLanguage(), { month: "short", day: "numeric" });
 }
 
 function formatDuration(milliseconds: number): string {
@@ -293,7 +299,7 @@ function providerName(provider: ProviderId): string {
   return provider === "codex" ? "Codex" : "OpenRouter";
 }
 
-function InlineLoader({ label = "Working", quiet = false }: { label?: string; quiet?: boolean }) {
+function InlineLoader({ label = t("crew.working"), quiet = false }: { label?: string; quiet?: boolean }) {
   return (
     <span className={`inline-loader ${quiet ? "quiet" : ""}`} role="status" aria-label={label}>
       <i /><i /><i />
@@ -304,7 +310,7 @@ function InlineLoader({ label = "Working", quiet = false }: { label?: string; qu
 function activityIcon(activity: ActivityItem) {
   const props = { size: 15, weight: "regular" as const };
   if (activity.status === "failed") return <WarningCircle {...props} />;
-  if (activity.status === "running") return <InlineLoader label={`${activity.label} in progress`} quiet />;
+  if (activity.status === "running") return <InlineLoader label={t("act.inProgress", { label: tr(activity.label) })} quiet />;
   if (activity.kind === "reasoning") return <Brain {...props} />;
   if (activity.kind === "command") return <TerminalWindow {...props} />;
   if (activity.kind === "files") return <FileText {...props} />;
@@ -313,9 +319,9 @@ function activityIcon(activity: ActivityItem) {
 }
 
 function activityStatusLabel(activity: DisplayActivity): string {
-  if (activity.status === "running") return activity.count > 1 ? `${activity.count} actions, still working` : "In progress";
-  if (activity.status === "failed") return activity.count > 1 ? `${activity.count} grouped actions, needs attention` : "Needs attention";
-  return activity.count > 1 ? `${activity.count} related actions grouped` : "Completed";
+  if (activity.status === "running") return activity.count > 1 ? t("act.countRunning", { n: activity.count }) : t("status.inProgress");
+  if (activity.status === "failed") return activity.count > 1 ? t("act.countFailed", { n: activity.count }) : t("status.needsAttention");
+  return activity.count > 1 ? t("act.countGrouped", { n: activity.count }) : t("status.completed");
 }
 
 function ActivityPanel({ activities, running, outcome }: { activities: ActivityItem[]; running: boolean; outcome?: RunOutcome }) {
@@ -324,21 +330,21 @@ function ActivityPanel({ activities, running, outcome }: { activities: ActivityI
   if (!visible.length && !running && !outcome) return null;
   const current = activitiesForDisplay(rawVisible.slice(-1)).at(-1);
   const outcomeLabel = outcome === "blocked"
-    ? "Blocked"
+    ? t("status.blocked")
     : outcome === "failed"
-      ? "Failed"
+      ? t("status.failed")
       : outcome === "stopped"
-        ? "Stopped"
-        : "Delivered";
+        ? t("status.stopped")
+        : t("status.delivered");
   return (
-    <section className={`activity-panel outcome-${outcome || "running"}`} aria-label="Agent activity">
+    <section className={`activity-panel outcome-${outcome || "running"}`} aria-label={t("act.aria")}>
       <div className="activity-heading">
         <span className={`activity-live-mark ${running ? "running" : "complete"}`} aria-hidden="true"><i /><i /><i /></span>
-        <span><strong>{running ? current?.label || "Preparing the first action" : "Work summary"}</strong><small>{visible.length} {visible.length === 1 ? "phase" : "phases"} · {rawVisible.length} {rawVisible.length === 1 ? "action" : "actions"}</small></span>
-        <em>{running ? "Live" : outcomeLabel}</em>
+        <span><strong>{running ? (current?.label ? tr(current.label) : t("act.preparing")) : t("act.summary")}</strong><small>{tn("act.phases", visible.length)} · {tn("act.actions", rawVisible.length)}</small></span>
+        <em>{running ? t("status.live") : outcomeLabel}</em>
       </div>
       {!visible.length && running && (
-        <div className="activity-skeleton" aria-label="Waiting for the first activity">
+        <div className="activity-skeleton" aria-label={t("act.waiting")}>
           <i /><i /><i />
         </div>
       )}
@@ -348,7 +354,7 @@ function ActivityPanel({ activities, running, outcome }: { activities: ActivityI
             <details className={`activity-row kind-${activity.kind} ${activity.status}`} key={activity.id}>
               <summary>
                 <span className="activity-icon">{activityIcon(activity)}</span>
-                <span className="activity-label"><strong>{activity.label}{activity.count > 1 && <b>×{activity.count}</b>}</strong><small>{activityStatusLabel(activity)}</small></span>
+                <span className="activity-label"><strong>{tr(activity.label)}{activity.count > 1 && <b>×{activity.count}</b>}</strong><small>{activityStatusLabel(activity)}</small></span>
                 <time>{timeLabel(activity.createdAt)}</time>
                 {activity.detail && <CaretDown size={13} />}
               </summary>
@@ -376,20 +382,20 @@ function MessageList({ conversation, agents }: { conversation: Conversation; age
       <div className="message-stack">
         {!conversation.messages.length ? (
           <div className="empty-session">
-            <div className="bot-stage" aria-label="Grokky bot crew">
+            <div className="bot-stage" aria-label={t("crew.botGroup")}>
               <div className="bot-stage-halo" />
-              <BotMascot mood="thinking" variant="cyan" size="md" label="Explorer bot" className="stage-bot stage-bot-left" />
-              <BotMascot mood="idle" variant="lime" size="lg" label="Lead Grokky bot" className="stage-bot stage-bot-center" />
-              <BotMascot mood="working" variant="coral" size="md" label="Builder bot" className="stage-bot stage-bot-right" />
+              <BotMascot mood="thinking" variant="cyan" size="md" label={t("crew.botExplorer")} className="stage-bot stage-bot-left" />
+              <BotMascot mood="idle" variant="lime" size="lg" label={t("crew.botLead")} className="stage-bot stage-bot-center" />
+              <BotMascot mood="working" variant="coral" size="md" label={t("crew.botBuilder")} className="stage-bot stage-bot-right" />
             </div>
             <div className="empty-copy">
-              <h1>What should Grokky build?</h1>
-              <p>Choose a starting point or describe the outcome below.</p>
+              <h1>{t("empty.title")}</h1>
+              <p>{t("empty.subtitle")}</p>
               <div className="starter-list">
                 {STARTERS.map((starter, index) => (
-                  <button key={starter.prompt} type="button" onClick={() => window.dispatchEvent(new CustomEvent("grokky:starter", { detail: starter.prompt }))}>
+                  <button key={starter.prompt} type="button" onClick={() => window.dispatchEvent(new CustomEvent("grokky:starter", { detail: tr(starter.prompt) }))}>
                     <BotMascot mood={starter.mood} variant={botVariantAt(index + 1)} size="xs" />
-                    <strong>{starter.title}</strong>
+                    <strong>{tr(starter.title)}</strong>
                     <ArrowUpRight className="starter-arrow" size={15} />
                   </button>
                 ))}
@@ -403,7 +409,7 @@ function MessageList({ conversation, agents }: { conversation: Conversation; age
               <div className="message-body">
                 <div className="message-shell">
                   <header>
-                    <span>{message.role === "user" ? "You" : "Grokky"}</span>
+                    <span>{message.role === "user" ? t("msg.you") : "Grokky"}</span>
                     <time>{timeLabel(message.createdAt)}</time>
                   </header>
                   <div className="message-content"><MarkdownMessage content={message.content} /></div>
@@ -454,16 +460,16 @@ function CrewRunPanel({ conversation, agents }: { conversation: Conversation; ag
   const finishedAt = runs.length ? Math.max(...runs.map((run) => run.updatedAt)) : conversation.updatedAt;
   const elapsed = formatDuration((stage === "complete" ? finishedAt : now) - startedAt);
   const header = stage === "starting"
-    ? { title: `Requesting ${runs.length} specialist${runs.length === 1 ? "" : "s"}`, detail: `Awaiting ${unconfirmed.length} confirmed thread${unconfirmed.length === 1 ? "" : "s"}` }
+    ? { title: tn("crewh.requesting", runs.length), detail: tn("crewh.awaiting", unconfirmed.length) }
     : stage === "parallel"
       ? active.length
-        ? { title: `${active.length} specialist${active.length === 1 ? "" : "s"} working`, detail: queued.length ? `${queued.length} queued for handoff` : reported.length ? `${reported.length} of ${runs.length} reports received` : "Independent work is live" }
-        : { title: "Preparing the next specialist", detail: `${queued.length} queued for handoff` }
+        ? { title: tn("crewh.working", active.length), detail: queued.length ? t("crewh.queued", { n: queued.length }) : reported.length ? t("crewh.reportsReceived", { r: reported.length, n: runs.length }) : t("crewh.independent") }
+        : { title: t("crewh.nextSpecialist"), detail: t("crewh.queued", { n: queued.length }) }
       : stage === "synthesizing"
-        ? { title: "Grokky is synthesizing", detail: `${reported.length} specialist ${reported.length === 1 ? "report" : "reports"} ready` }
+        ? { title: t("crewh.synthesizing"), detail: tn("crewh.reportsReady", reported.length) }
         : conversation.lastRunOutcome === "blocked" || conversation.lastRunOutcome === "failed"
-          ? { title: "Crew needs attention", detail: failed.length ? `${reported.length} reported, ${failed.length} stopped` : `${reported.length} of ${runs.length} confirmed reports received` }
-          : { title: "Crew run delivered", detail: `${reported.length} specialist ${reported.length === 1 ? "report" : "reports"} combined` };
+          ? { title: t("crewh.needsAttention"), detail: failed.length ? t("crewh.reportedStopped", { r: reported.length, f: failed.length }) : t("crewh.confirmedReceived", { r: reported.length, n: runs.length }) }
+          : { title: t("crewh.delivered"), detail: tn("crewh.combined", reported.length) };
   useEffect(() => {
     if (stage !== "complete") setExpanded(true);
   }, [stage, conversation.id]);
@@ -484,7 +490,7 @@ function CrewRunPanel({ conversation, agents }: { conversation: Conversation; ag
 
   if (!runs.length) return null;
   return (
-    <section className={`crew-run-panel stage-${stage} ${stage !== "complete" ? "is-active" : ""}`} aria-label="Crew activity">
+    <section className={`crew-run-panel stage-${stage} ${stage !== "complete" ? "is-active" : ""}`} aria-label={t("crew.activity")}>
       <div className="crew-run-header">
         <button type="button" aria-expanded={expanded} onClick={() => setExpanded((value) => !value)}>
           <span className="crew-avatar-stack" aria-hidden="true">
@@ -494,11 +500,11 @@ function CrewRunPanel({ conversation, agents }: { conversation: Conversation; ag
           <time>{elapsed}</time>
           <CaretDown size={14} />
         </button>
-        {conversation.status === "running" && <button className="crew-stop" type="button" onClick={() => void window.grokky.cancelRun(conversation.id)}><Stop size={12} weight="fill" />Stop</button>}
+        {conversation.status === "running" && <button className="crew-stop" type="button" onClick={() => void window.grokky.cancelRun(conversation.id)}><Stop size={12} weight="fill" />{t("crew.stop")}</button>}
       </div>
       {expanded && (
         <>
-          <div className="crew-tabs" role="tablist" aria-label="Crew details">
+          <div className="crew-tabs" role="tablist" aria-label={t("crew.details")}>
             <button
               id={`crew-tab-overview-${conversation.id}`}
               className="crew-tab"
@@ -510,7 +516,7 @@ function CrewRunPanel({ conversation, agents }: { conversation: Conversation; ag
               onClick={() => selectTab("overview")}
               onKeyDown={(event) => moveTab(event, "messages")}
             >
-              <UsersThree size={13} /><span>Overview</span>
+              <UsersThree size={13} /><span>{t("crew.overview")}</span>
             </button>
             <button
               id={`crew-tab-messages-${conversation.id}`}
@@ -523,7 +529,7 @@ function CrewRunPanel({ conversation, agents }: { conversation: Conversation; ag
               onClick={() => selectTab("messages")}
               onKeyDown={(event) => moveTab(event, "overview")}
             >
-              <PaperPlaneRight size={13} /><span>Messages</span><small>{communications.length}</small>
+              <PaperPlaneRight size={13} /><span>{t("crew.messages")}</span><small>{communications.length}</small>
             </button>
           </div>
           {activeTab === "overview" ? (
@@ -540,8 +546,8 @@ function CrewRunPanel({ conversation, agents }: { conversation: Conversation; ag
                 <div className="crew-run-footer">
                   <div className="crew-lead-node stage-synthesizing">
                     <BotMascot mood="thinking" identity="grokky-lead" variant="lime" size="xs" />
-                    <span><strong>Grokky lead</strong><small>Resolving the specialist findings into one response</small></span>
-                    <em aria-live="polite"><Sparkle size={11} weight="fill" />Synthesizing</em>
+                    <span><strong>{t("crew.lead")}</strong><small>{t("crew.resolving")}</small></span>
+                    <em aria-live="polite"><Sparkle size={11} weight="fill" />{t("crew.synthesizing")}</em>
                   </div>
                 </div>
               )}
@@ -562,10 +568,10 @@ function CrewRunPanel({ conversation, agents }: { conversation: Conversation; ag
 
 function CrewMailbox({ id, labelledBy, communications, running }: { id: string; labelledBy: string; communications: CrewCommunication[]; running: boolean }) {
   const labels: Record<CrewCommunication["kind"], string> = {
-    assignment: "Assignment",
-    message: "Direct message",
-    report: "Specialist report",
-    status: "Control signal",
+    assignment: t("crew.kind.assignment"),
+    message: t("crew.kind.message"),
+    report: t("crew.kind.report"),
+    status: t("crew.kind.status"),
   };
   const groups = groupCrewCommunications(communications);
   return (
@@ -573,7 +579,7 @@ function CrewMailbox({ id, labelledBy, communications, running }: { id: string; 
       {!groups.length ? (
         <div className="crew-mailbox-empty">
           <span aria-hidden="true"><PaperPlaneRight size={18} /></span>
-          <div><strong>No crew messages yet</strong><small>The first confirmed assignment will appear here.</small></div>
+          <div><strong>{t("crew.noMessages")}</strong><small>{t("crew.firstAssignment")}</small></div>
         </div>
       ) : (
         <ol aria-live="polite">
@@ -586,7 +592,7 @@ function CrewMailbox({ id, labelledBy, communications, running }: { id: string; 
                 <div className="crew-message-group-copy">
                   <header className="crew-message-group-header">
                     <strong>{group.senderName}</strong>
-                    {group.entries.length > 1 && <small>{group.entries.length} messages</small>}
+                    {group.entries.length > 1 && <small>{tn("crew.msgCount", group.entries.length)}</small>}
                   </header>
                   <div className="crew-message-stack">
                     {group.entries.map((entry) => (
@@ -598,7 +604,7 @@ function CrewMailbox({ id, labelledBy, communications, running }: { id: string; 
                         {entry.content && <div className="crew-mailbox-content"><MarkdownMessage content={entry.content} /></div>}
                         <footer>
                           <span>{labels[entry.kind]}</span>
-                          {entry.status !== "completed" && <em><i />{entry.status === "failed" ? "Failed" : running ? "In progress" : "Sent"}</em>}
+                          {entry.status !== "completed" && <em><i />{entry.status === "failed" ? t("status.failed") : running ? t("status.inProgress") : t("crew.sent")}</em>}
                         </footer>
                       </article>
                     ))}
@@ -618,27 +624,27 @@ function CrewRunRow({ run, activities, now }: { run: AgentRun; activities: Activ
   const queued = run.id.startsWith("queued:");
   const unconfirmed = run.id.startsWith("unconfirmed:");
   const statusLabel = queued
-    ? "Queued for handoff"
+    ? t("crew.queued")
     : unconfirmed
-    ? "Awaiting spawn"
+    ? t("crew.awaitingSpawn")
     : run.status === "starting"
-      ? "Connecting"
+      ? t("crew.connecting")
       : run.status === "waiting"
-        ? "Reporting"
+        ? t("crew.reporting")
         : run.status === "completed"
-          ? "Reported"
+          ? t("crew.reported")
           : run.status === "failed"
-            ? "Failed"
+            ? t("status.failed")
             : run.status === "stopped"
-              ? "Stopped"
-              : "Working";
+              ? t("status.stopped")
+              : t("crew.working");
   const isSynthetic = queued || unconfirmed;
   const isActive = !isSynthetic && activeAgentStatuses.has(run.status);
   const duration = formatDuration((isActive ? now : run.updatedAt) - run.createdAt);
   const content = (
     <>
       <BotMascot mood={runMood(run)} identity={run.name || run.id} variant={run.icon} size="xs" />
-      <span><strong>{run.name}<time>{duration}</time></strong><small>{currentActivity ? currentActivity.label : run.task}</small></span>
+      <span><strong>{run.name}<time>{duration}</time></strong><small>{currentActivity ? tr(currentActivity.label) : tr(run.task)}</small></span>
       <em><i />{statusLabel}</em>
     </>
   );
@@ -687,7 +693,7 @@ function CrewPicker({ conversation, agents, enabled, maxAgents, onOpenAgents, on
   async function toggle(agent: AgentDefinition) {
     const exists = conversation.selectedAgentIds.includes(agent.id);
     if (!exists && conversation.selectedAgentIds.length >= maxAgents) {
-      onError(`This session is capped at ${maxAgents} crew members`);
+      onError(t("crew.capped", { n: maxAgents }));
       return;
     }
     const next = exists
@@ -696,7 +702,7 @@ function CrewPicker({ conversation, agents, enabled, maxAgents, onOpenAgents, on
     try {
       await window.grokky.updateConversation(conversation.id, { selectedAgentIds: next });
     } catch (error) {
-      onError(error instanceof Error ? error.message : "Crew selection could not be updated");
+      onError(error instanceof Error ? error.message : t("crew.updateFailed"));
     }
   }
 
@@ -704,26 +710,26 @@ function CrewPicker({ conversation, agents, enabled, maxAgents, onOpenAgents, on
     <div className="crew-picker" ref={pickerRef}>
       <button ref={triggerRef} className={`crew-picker-trigger ${selected.length ? "has-crew" : ""}`} type="button" aria-expanded={open} aria-haspopup="dialog" disabled={conversation.status === "running"} onClick={() => setOpen((value) => !value)}>
         <UsersThree size={14} />
-        <span>{selected.length ? `Crew ${selected.length}` : "Solo"}</span>
+        <span>{selected.length ? t("crew.count", { n: selected.length }) : t("crew.solo")}</span>
         <CaretDown size={12} />
       </button>
       {open && (
-        <div className="crew-picker-popover" role="dialog" aria-label="Choose the crew">
-          <header><strong>Choose the crew</strong><small>{conversation.provider === "openrouter" ? "Parallel read-only scouts, then one lead" : "Codex spawns and coordinates these roles"}</small></header>
-          {!enabled && <div className="crew-picker-warning"><WarningCircle size={15} />Multi-agent orchestration is disabled.</div>}
+        <div className="crew-picker-popover" role="dialog" aria-label={t("crew.choose")}>
+          <header><strong>{t("crew.choose")}</strong><small>{conversation.provider === "openrouter" ? t("crew.agnesHint") : t("crew.codexHint")}</small></header>
+          {!enabled && <div className="crew-picker-warning"><WarningCircle size={15} />{t("crew.disabled")}</div>}
           <div className="crew-picker-list">
             {available.map((agent) => {
               const checked = conversation.selectedAgentIds.includes(agent.id);
               return (
                 <button key={agent.id} data-agent-id={agent.id} type="button" className={checked ? "selected" : ""} disabled={!enabled} onClick={() => void toggle(agent)}>
                   <BotMascot mood={checked ? "working" : "idle"} identity={agent.name || agent.id} variant={agent.icon} size="xs" />
-                  <span><strong>{agent.name}</strong><small>{agent.description}</small></span>
+                  <span><strong>{agent.name}</strong><small>{tr(agent.description)}</small></span>
                   {checked ? <CheckCircle size={17} weight="fill" /> : <Plus size={15} />}
                 </button>
               );
             })}
           </div>
-          <button className="crew-create-link" type="button" onClick={() => { setOpen(false); onOpenAgents(); }}><UserPlus size={15} />Create or edit agents</button>
+          <button className="crew-create-link" type="button" onClick={() => { setOpen(false); onOpenAgents(); }}><UserPlus size={15} />{t("crew.createEdit")}</button>
         </div>
       )}
     </div>
@@ -785,7 +791,7 @@ function ProjectPicker({ conversation, recentDirectories, attention, openRequest
       await window.grokky.updateConversation(conversation.id, { projectMode: "project", workingDirectory: pathname });
       setOpen(false);
     } catch (error) {
-      onError(error instanceof Error ? error.message : "Project could not be selected");
+      onError(error instanceof Error ? error.message : t("project.selectFailed"));
     }
   }
 
@@ -794,7 +800,7 @@ function ProjectPicker({ conversation, recentDirectories, attention, openRequest
       const pathname = await window.grokky.chooseWorkingDirectory(conversation.id);
       if (pathname) setOpen(false);
     } catch (error) {
-      onError(error instanceof Error ? error.message : "Project could not be selected");
+      onError(error instanceof Error ? error.message : t("project.selectFailed"));
     }
   }
 
@@ -803,7 +809,7 @@ function ProjectPicker({ conversation, recentDirectories, attention, openRequest
       await window.grokky.updateConversation(conversation.id, { projectMode: "none" });
       setOpen(false);
     } catch (error) {
-      onError(error instanceof Error ? error.message : "Project could not be cleared");
+      onError(error instanceof Error ? error.message : t("project.clearFailed"));
     }
   }
 
@@ -811,12 +817,12 @@ function ProjectPicker({ conversation, recentDirectories, attention, openRequest
     <div className="project-picker" ref={pickerRef}>
       <button ref={triggerRef} className={`project-picker-trigger ${conversation.projectMode === "project" ? "has-project" : ""} ${attention ? "needs-attention" : ""}`} type="button" aria-expanded={open} aria-haspopup="dialog" disabled={conversation.status === "running"} onClick={() => setOpen((value) => !value)}>
         <FolderOpen size={14} />
-        <span>{conversation.projectMode === "project" ? projectName(conversation.workingDirectory) : "Choose project"}</span>
+        <span>{conversation.projectMode === "project" ? projectName(conversation.workingDirectory) : t("project.choose")}</span>
         <CaretDown size={12} />
       </button>
       {open && (
-        <div className="project-picker-popover" role="dialog" aria-label="Choose a project">
-          <label className="project-search"><MagnifyingGlass size={15} /><input autoFocus value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search projects" aria-label="Search projects" /></label>
+        <div className="project-picker-popover" role="dialog" aria-label={t("project.chooseAria")}>
+          <label className="project-search"><MagnifyingGlass size={15} /><input autoFocus value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t("project.search")} aria-label={t("project.search")} /></label>
           <div className="project-picker-list">
             {filtered.map((pathname) => {
               const selected = conversation.projectMode === "project" && pathname === conversation.workingDirectory;
@@ -826,11 +832,11 @@ function ProjectPicker({ conversation, recentDirectories, attention, openRequest
                 </button>
               );
             })}
-            {!filtered.length && <p>No matching recent projects</p>}
+            {!filtered.length && <p>{t("project.noMatch")}</p>}
           </div>
           <div className="project-picker-actions">
-            <button type="button" onClick={() => void chooseProject()}><Plus size={16} />Choose or create project</button>
-            <button type="button" onClick={() => void clearProject()}><X size={16} />Don't work in a project</button>
+            <button type="button" onClick={() => void chooseProject()}><Plus size={16} />{t("project.chooseOrCreate")}</button>
+            <button type="button" onClick={() => void clearProject()}><X size={16} />{t("project.none")}</button>
           </div>
         </div>
       )}
@@ -843,9 +849,9 @@ type ComposerAccess = "read-only" | "workspace" | "full";
 function AccessPicker({ conversation, attention, openRequest, onError }: { conversation: Conversation; attention: boolean; openRequest: number; onError(error: string): void }) {
   const value: ComposerAccess = conversation.sandboxMode === "read-only" ? "read-only" : conversation.allowCommands ? "full" : "workspace";
   const choices: Array<{ id: ComposerAccess; label: string; detail: string }> = [
-    { id: "read-only", label: "Read only", detail: "Inspect files without changing them" },
-    { id: "workspace", label: "Workspace access", detail: "Read and edit files in this project" },
-    { id: "full", label: "Full access", detail: "Edit files and run local development commands" },
+    { id: "read-only", label: t("access.readOnly"), detail: t("access.readOnlyDetail") },
+    { id: "workspace", label: t("access.workspace"), detail: t("access.workspaceDetail") },
+    { id: "full", label: t("access.full"), detail: t("access.fullDetail") },
   ];
   const [open, setOpen] = useState(false);
   const pickerRef = useRef<HTMLDivElement>(null);
@@ -871,7 +877,7 @@ function AccessPicker({ conversation, attention, openRequest, onError }: { conve
       });
       setOpen(false);
     } catch (error) {
-      onError(error instanceof Error ? error.message : "Access mode could not be updated");
+      onError(error instanceof Error ? error.message : t("access.updateFailed"));
     }
   }
 
@@ -881,7 +887,7 @@ function AccessPicker({ conversation, attention, openRequest, onError }: { conve
         <ShieldCheck size={14} /><span>{choices.find((choice) => choice.id === value)?.label}</span><CaretDown size={12} />
       </button>
       {open && (
-        <div className="access-picker-popover" role="menu" aria-label="Choose access mode">
+        <div className="access-picker-popover" role="menu" aria-label={t("access.chooseAria")}>
           {choices.map((choice) => (
             <button key={choice.id} type="button" className={choice.id === value ? "selected" : ""} onClick={() => void select(choice.id)}>
               <ShieldCheck size={17} /><span><strong>{choice.label}</strong><small>{choice.detail}</small></span>{choice.id === value && <CheckCircle size={17} weight="fill" />}
@@ -947,13 +953,13 @@ function Composer({ conversation, agents, recentDirectories, multiAgentEnabled, 
       await window.grokky.sendMessage(conversation.id, value);
     } catch (error) {
       setDraft(value);
-      onError(error instanceof Error ? error.message : "Message could not be sent");
+      onError(error instanceof Error ? error.message : t("composer.sendFailed"));
     }
   }
 
   return (
     <div className="composer-wrap">
-      {conversation.status === "running" && !conversation.selectedAgentIds.length && <BotMascot mood={conversationMood(conversation)} identity={`conversation:${conversation.id}`} size="sm" className="composer-bot" label="Grokky is working" />}
+      {conversation.status === "running" && !conversation.selectedAgentIds.length && <BotMascot mood={conversationMood(conversation)} identity={`conversation:${conversation.id}`} size="sm" className="composer-bot" label={t("composer.workingLabel")} />}
       <div className={`composer ${conversation.status === "running" ? "is-running" : ""}`}>
         <textarea
           ref={textarea}
@@ -966,16 +972,16 @@ function Composer({ conversation, agents, recentDirectories, multiAgentEnabled, 
             }
           }}
           rows={1}
-          placeholder={conversation.status === "running" ? "Grokky is working…" : "Message Grokky"}
-          aria-label="Message Grokky"
+          placeholder={conversation.status === "running" ? t("composer.working") : t("composer.placeholder")}
+          aria-label={t("composer.placeholder")}
           disabled={conversation.status === "running"}
         />
         {conversation.status === "running" ? (
-          <button className="send-button stop-button" type="button" title="Stop run" onClick={() => void window.grokky.cancelRun(conversation.id)}>
+          <button className="send-button stop-button" type="button" title={t("composer.stop")} onClick={() => void window.grokky.cancelRun(conversation.id)}>
             <Stop size={16} weight="fill" />
           </button>
         ) : (
-          <button className="send-button" type="button" title="Send message" disabled={!draft.trim()} onClick={() => void submit()}>
+          <button className="send-button" type="button" title={t("composer.send")} disabled={!draft.trim()} onClick={() => void submit()}>
             <PaperPlaneRight size={17} weight="fill" />
           </button>
         )}
@@ -984,9 +990,9 @@ function Composer({ conversation, agents, recentDirectories, multiAgentEnabled, 
         <ProjectPicker conversation={conversation} recentDirectories={recentDirectories} attention={preflightTarget === "project"} openRequest={projectOpenRequest} onError={onError} />
         <AccessPicker conversation={conversation} attention={preflightTarget === "access"} openRequest={accessOpenRequest} onError={onError} />
         <CrewPicker conversation={conversation} agents={agents} enabled={multiAgentEnabled} maxAgents={maxAgents} onOpenAgents={onOpenAgents} onError={onError} />
-        {preflightTarget && <span className="composer-preflight-note"><WarningCircle size={12} />{preflightTarget === "project" ? "Choose a project to continue" : "Choose Full access to continue"}</span>}
-        <span className={`web-access-status ${webSearchEnabled ? "enabled" : ""}`} title={webSearchEnabled ? "Live web search is enabled" : "Live web search is disabled"}><GlobeHemisphereWest size={12} />Web {webSearchEnabled ? "on" : "off"}</span>
-        <span>Enter to send</span>
+        {preflightTarget && <span className="composer-preflight-note"><WarningCircle size={12} />{preflightTarget === "project" ? t("composer.needProject") : t("composer.needFull")}</span>}
+        <span className={`web-access-status ${webSearchEnabled ? "enabled" : ""}`} title={webSearchEnabled ? t("composer.webOnTitle") : t("composer.webOffTitle")}><GlobeHemisphereWest size={12} />{webSearchEnabled ? t("composer.webOn") : t("composer.webOff")}</span>
+        <span>{t("composer.enter")}</span>
       </div>
     </div>
   );
@@ -1009,7 +1015,7 @@ function Switch({ checked, disabled, label, onChange }: {
 function SignalPalette({ value, onChange }: { value: AccentPalette; onChange(value: AccentPalette): void }) {
   return (
     <fieldset className="signal-palette">
-      <legend>Signal colour</legend>
+      <legend>{t("palette.signal")}</legend>
       <div className="signal-palette-grid">
         {SIGNAL_PALETTES.map((palette, index) => (
           <button
@@ -1018,29 +1024,29 @@ function SignalPalette({ value, onChange }: { value: AccentPalette; onChange(val
             data-palette={palette.id}
             className={value === palette.id ? "selected" : ""}
             aria-pressed={value === palette.id}
-            aria-label={`${palette.label}: ${palette.detail}`}
+            aria-label={`${tr(palette.label)}: ${tr(palette.detail)}`}
             onClick={() => onChange(palette.id)}
           >
             <span className="signal-swatch" aria-hidden="true"><i /><i /></span>
-            <span className="signal-palette-copy"><small>{String(index + 1).padStart(2, "0")}</small><strong>{palette.label}</strong></span>
+            <span className="signal-palette-copy"><small>{String(index + 1).padStart(2, "0")}</small><strong>{tr(palette.label)}</strong></span>
           </button>
         ))}
       </div>
-      <p>{SIGNAL_PALETTES.find((palette) => palette.id === value)?.detail}</p>
+      <p>{tr(SIGNAL_PALETTES.find((palette) => palette.id === value)?.detail ?? "")}</p>
     </fieldset>
   );
 }
 
 function scopeLabel(skill: SkillCapability): string {
-  if (skill.scope === "project") return "Project";
+  if (skill.scope === "project") return t("scope.project");
   if (skill.scope === "plugin") {
     const parts = skill.path.split("/");
     const cacheIndex = parts.lastIndexOf("cache");
     const version = cacheIndex >= 0 ? parts[cacheIndex + 3] : undefined;
-    return version && /^\d/.test(version) ? `Plugin ${version}` : "Plugin";
+    return version && /^\d/.test(version) ? t("scope.pluginVersion", { version }) : t("scope.plugin");
   }
-  if (skill.scope === "system") return "System";
-  return "Personal";
+  if (skill.scope === "system") return t("scope.system");
+  return t("choice.personal");
 }
 
 function ComputerCapabilityIcon({ id }: { id: ComputerCapabilityId }) {
@@ -1052,10 +1058,10 @@ function ComputerCapabilityIcon({ id }: { id: ComputerCapabilityId }) {
 }
 
 function permissionLabel(value: string): string {
-  if (value === "not-required") return "No system prompt needed";
-  if (value === "not-determined") return "Permission not granted";
-  if (value === "unavailable") return "Unavailable on this device";
-  return value === "granted" ? "System permission granted" : "System permission denied";
+  if (value === "not-required") return t("cmp.perm.none");
+  if (value === "not-determined") return t("cmp.perm.notGranted");
+  if (value === "unavailable") return t("cmp.perm.unavailable");
+  return value === "granted" ? t("cmp.perm.granted") : t("cmp.perm.denied");
 }
 
 function SettingsDialog({ snapshot, conversation, agents, initialTab, onAgentsChange, onClose, onError }: {
@@ -1067,6 +1073,7 @@ function SettingsDialog({ snapshot, conversation, agents, initialTab, onAgentsCh
   onClose(): void;
   onError(error: string): void;
 }) {
+  const { language } = useStrings();
   const [tab, setTab] = useState<SettingsTab>(initialTab);
   const [capabilities, setCapabilities] = useState<CapabilitiesSnapshot | null>(null);
   const [search, setSearch] = useState("");
@@ -1082,7 +1089,7 @@ function SettingsDialog({ snapshot, conversation, agents, initialTab, onAgentsCh
 
   useEffect(() => {
     setTab(initialTab);
-    void window.grokky.getCapabilities().then(setCapabilities).catch((error) => onError(error instanceof Error ? error.message : "Capabilities could not be loaded"));
+    void window.grokky.getCapabilities().then(setCapabilities).catch((error) => onError(error instanceof Error ? error.message : t("set.capLoadFailed")));
   }, [initialTab, onError]);
 
   useEffect(() => {
@@ -1099,7 +1106,7 @@ function SettingsDialog({ snapshot, conversation, agents, initialTab, onAgentsCh
     try {
       await window.grokky.updateConversation(conversation.id, value);
     } catch (error) {
-      onError(error instanceof Error ? error.message : "Session could not be updated");
+      onError(error instanceof Error ? error.message : t("set.sessionUpdateFailed"));
     }
   }
 
@@ -1107,7 +1114,7 @@ function SettingsDialog({ snapshot, conversation, agents, initialTab, onAgentsCh
     try {
       await window.grokky.updateSettings(value);
     } catch (error) {
-      onError(error instanceof Error ? error.message : "Settings could not be updated");
+      onError(error instanceof Error ? error.message : t("set.settingsUpdateFailed"));
     }
   }
 
@@ -1116,7 +1123,7 @@ function SettingsDialog({ snapshot, conversation, agents, initialTab, onAgentsCh
     try {
       setCapabilities(await action());
     } catch (error) {
-      onError(error instanceof Error ? error.message : "Capability could not be updated");
+      onError(error instanceof Error ? error.message : t("set.capUpdateFailed"));
     } finally {
       setBusy("");
     }
@@ -1127,7 +1134,7 @@ function SettingsDialog({ snapshot, conversation, agents, initialTab, onAgentsCh
     try {
       await action();
     } catch (error) {
-      onError(error instanceof Error ? error.message : "Computer access could not be updated");
+      onError(error instanceof Error ? error.message : t("cmp.updateFailed"));
     } finally {
       setComputerBusy("");
     }
@@ -1170,7 +1177,7 @@ function SettingsDialog({ snapshot, conversation, agents, initialTab, onAgentsCh
       setAgentDraft(null);
       setEditingAgentId(null);
     } catch (error) {
-      onError(error instanceof Error ? error.message : "Agent could not be saved");
+      onError(error instanceof Error ? error.message : t("agt.saveFailed"));
     } finally {
       setAgentBusy(false);
     }
@@ -1179,41 +1186,41 @@ function SettingsDialog({ snapshot, conversation, agents, initialTab, onAgentsCh
   async function removeAgent() {
     if (!editingAgentId) return;
     const current = agents.find((agent) => agent.id === editingAgentId);
-    if (!current || !window.confirm(`Delete ${current.name}? This removes its local agent definition.`)) return;
+    if (!current || !window.confirm(t("agt.confirmDelete", { name: current.name }))) return;
     setAgentBusy(true);
     try {
       onAgentsChange(await window.grokky.deleteAgent(editingAgentId));
       setAgentDraft(null);
       setEditingAgentId(null);
     } catch (error) {
-      onError(error instanceof Error ? error.message : "Agent could not be deleted");
+      onError(error instanceof Error ? error.message : t("agt.deleteFailed"));
     } finally {
       setAgentBusy(false);
     }
   }
 
   const navItems: Array<{ id: SettingsTab; label: string; icon: typeof SlidersHorizontal }> = [
-    { id: "session", label: "Session", icon: SlidersHorizontal },
-    { id: "computer", label: "Computer access", icon: DesktopTower },
-    { id: "agents", label: "Agents", icon: UsersThree },
-    { id: "skills", label: "Skills", icon: PuzzlePiece },
-    { id: "mcp", label: "MCP servers", icon: PlugsConnected },
-    { id: "connectors", label: "Connectors", icon: Robot },
+    { id: "session", label: t("set.tab.session"), icon: SlidersHorizontal },
+    { id: "computer", label: t("set.tab.computer"), icon: DesktopTower },
+    { id: "agents", label: t("set.tab.agents"), icon: UsersThree },
+    { id: "skills", label: t("set.tab.skills"), icon: PuzzlePiece },
+    { id: "mcp", label: t("set.tab.mcp"), icon: PlugsConnected },
+    { id: "connectors", label: t("set.tab.connectors"), icon: Robot },
   ];
   const navGroups: Array<{ label: string; items: typeof navItems }> = [
-    { label: "Workspace", items: navItems.slice(0, 2) },
-    { label: "Orchestration", items: navItems.slice(2, 4) },
-    { label: "Extensions", items: navItems.slice(4, 6) },
+    { label: t("set.group.workspace"), items: navItems.slice(0, 2) },
+    { label: t("set.group.orchestration"), items: navItems.slice(2, 4) },
+    { label: t("set.group.extensions"), items: navItems.slice(4, 6) },
   ];
 
   return (
     <div className="settings-backdrop" role="presentation" onMouseDown={(event) => { if (event.currentTarget === event.target) onClose(); }}>
-      <div className="settings-dialog" role="dialog" aria-modal="true" aria-label="Grokky settings">
-        <nav className="settings-nav" aria-label="Settings sections">
+      <div className="settings-dialog" role="dialog" aria-modal="true" aria-label={t("set.aria")}>
+        <nav className="settings-nav" aria-label={t("set.sections")}>
           <div className="settings-brand"><BrandMark size="sm" /><strong>Grokky</strong></div>
           <div className="settings-nav-intro">
-            <strong>Control room</strong>
-            <span>Shape how Grokky works.</span>
+            <strong>{t("set.controlRoom")}</strong>
+            <span>{t("set.shape")}</span>
           </div>
           <div className="settings-nav-groups">
             {navGroups.map((group) => (
@@ -1239,49 +1246,54 @@ function SettingsDialog({ snapshot, conversation, agents, initialTab, onAgentsCh
         <section className="settings-panel">
           <header className="settings-header">
             <h2>{navItems.find((item) => item.id === tab)?.label}</h2>
-            <button className="icon-button" type="button" title="Close settings" onClick={onClose}><X size={18} /></button>
+            <button className="icon-button" type="button" title={t("set.close")} onClick={onClose}><X size={18} /></button>
           </header>
           <div className="settings-body">
             {tab === "session" && (
               <div className="settings-stack">
-                <div className="settings-intro"><h3>Workspace</h3><p>Choose where this chat can read and make changes.</p></div>
+                <div className="settings-intro"><h3>{t("set.group.workspace")}</h3><p>{t("set.workspaceIntro")}</p></div>
                 <button className="settings-row path-setting" type="button" onClick={() => void window.grokky.chooseWorkingDirectory(conversation.id)}>
                   <span className="settings-row-icon"><FolderOpen size={18} /></span>
-                  <span className="settings-copy"><strong>Working directory</strong><small>{conversation.projectMode === "project" ? conversation.workingDirectory : "No project selected"}</small></span>
+                  <span className="settings-copy"><strong>{t("set.workingDir")}</strong><small>{conversation.projectMode === "project" ? conversation.workingDirectory : t("hdr.noProject")}</small></span>
                   <ArrowUpRight size={15} />
                 </button>
                 <div className="settings-row path-setting">
                   <span className="settings-row-icon"><Monitor size={18} /></span>
-                  <span className="settings-copy"><strong>Appearance</strong><small>Choose how Grokky looks on this computer.</small></span>
-                  <SelectMenu value={snapshot.settings.theme} choices={THEME_CHOICES} label="Application appearance" onChange={(theme) => void patchSettings({ theme })} />
+                  <span className="settings-copy"><strong>{t("set.appearance")}</strong><small>{t("set.appearanceDetail")}</small></span>
+                  <SelectMenu value={snapshot.settings.theme} choices={THEME_CHOICES} label={t("set.appearanceAria")} onChange={(theme) => void patchSettings({ theme })} />
+                </div>
+                <div className="settings-row path-setting">
+                  <span className="settings-row-icon"><GlobeHemisphereWest size={18} /></span>
+                  <span className="settings-copy"><strong>{t("set.language")}</strong><small>{t("set.languageDetail")}</small></span>
+                  <SelectMenu value={language} choices={languageChoices()} label={t("set.languageAria")} onChange={(next) => setLanguage(next)} />
                 </div>
                 <SignalPalette value={snapshot.settings.accentPalette ?? "lime"} onChange={(accentPalette) => void patchSettings({ accentPalette })} />
                 <div className="settings-row">
-                  <span className="settings-copy"><strong>Workspace permission</strong><small>Control whether Grokky can edit files.</small></span>
-                  <SelectMenu value={conversation.sandboxMode} choices={SANDBOX_CHOICES} label="Workspace permission" disabled={conversation.status === "running"} onChange={(sandboxMode) => void patchConversation({ sandboxMode })} />
+                  <span className="settings-copy"><strong>{t("set.wsPermission")}</strong><small>{t("set.wsPermissionDetail")}</small></span>
+                  <SelectMenu value={conversation.sandboxMode} choices={SANDBOX_CHOICES} label={t("set.wsPermission")} disabled={conversation.status === "running"} onChange={(sandboxMode) => void patchConversation({ sandboxMode })} />
                 </div>
                 <div className={`settings-row ${conversation.sandboxMode === "read-only" ? "disabled" : ""}`}>
-                  <span className="settings-copy"><strong>Development commands</strong><small>Allow build and test commands for OpenRouter sessions.</small></span>
-                  <Switch checked={conversation.allowCommands} disabled={conversation.sandboxMode === "read-only" || conversation.status === "running"} label="Development commands" onChange={(checked) => void patchConversation({ allowCommands: checked })} />
+                  <span className="settings-copy"><strong>{t("set.devCommands")}</strong><small>{t("set.devCommandsDetail")}</small></span>
+                  <Switch checked={conversation.allowCommands} disabled={conversation.sandboxMode === "read-only" || conversation.status === "running"} label={t("set.devCommands")} onChange={(checked) => void patchConversation({ allowCommands: checked })} />
                 </div>
                 <div className="settings-row web-search-setting">
                   <span className="settings-row-icon"><GlobeHemisphereWest size={18} /></span>
-                  <span className="settings-copy"><strong>Live web search</strong><small>Let Codex and OpenRouter research current information and return source links.</small></span>
-                  <Switch checked={snapshot.settings.webSearchEnabled} disabled={conversation.status === "running"} label="Live web search" onChange={(checked) => void patchSettings({ webSearchEnabled: checked })} />
+                  <span className="settings-copy"><strong>{t("set.webSearch")}</strong><small>{t("set.webSearchDetail")}</small></span>
+                  <Switch checked={snapshot.settings.webSearchEnabled} disabled={conversation.status === "running"} label={t("set.webSearch")} onChange={(checked) => void patchSettings({ webSearchEnabled: checked })} />
                 </div>
-                <p className="settings-note">Applies on the next turn. Search calls may add provider tool charges.</p>
+                <p className="settings-note">{t("set.webSearchNote")}</p>
                 {conversation.provider === "openrouter" && (
                   <button className="settings-row path-setting" type="button" onClick={() => void window.grokky.chooseOpenRouterCredential()}>
                     <span className="settings-row-icon"><Robot size={18} /></span>
-                    <span className="settings-copy"><strong>OpenRouter credential</strong><small>{snapshot.settings.openRouterCredentialPath || "Choose an env file"}</small></span>
+                    <span className="settings-copy"><strong>{t("set.openRouterCredential")}</strong><small>{snapshot.settings.openRouterCredentialPath || t("set.chooseEnv")}</small></span>
                     <ArrowUpRight size={15} />
                   </button>
                 )}
                 {conversation.usage && (
                   <div className="usage-summary">
-                    <span><strong>{conversation.usage.inputTokens.toLocaleString()}</strong><small>input</small></span>
-                    <span><strong>{conversation.usage.outputTokens.toLocaleString()}</strong><small>output</small></span>
-                    <span><strong>{(conversation.usage.reasoningTokens ?? 0).toLocaleString()}</strong><small>reasoning</small></span>
+                    <span><strong>{conversation.usage.inputTokens.toLocaleString()}</strong><small>{t("set.usage.input")}</small></span>
+                    <span><strong>{conversation.usage.outputTokens.toLocaleString()}</strong><small>{t("set.usage.output")}</small></span>
+                    <span><strong>{(conversation.usage.reasoningTokens ?? 0).toLocaleString()}</strong><small>{t("set.usage.reasoning")}</small></span>
                   </div>
                 )}
               </div>
@@ -1292,15 +1304,15 @@ function SettingsDialog({ snapshot, conversation, agents, initialTab, onAgentsCh
                 <div className="computer-hero">
                   <div className="computer-hero-bot"><BotMascot mood={snapshot.computerAccess.enabled ? "working" : "idle"} identity="computer-access" size="lg" /></div>
                   <div>
-                    <span className="computer-kicker">Local runner</span>
-                    <h3>Give agents hands, with boundaries</h3>
-                    <p>Files, commands, web pages, screen visibility, and application control stay behind one permission layer.</p>
+                    <span className="computer-kicker">{t("cmp.kicker")}</span>
+                    <h3>{t("cmp.title")}</h3>
+                    <p>{t("cmp.intro")}</p>
                   </div>
-                  <Switch checked={snapshot.computerAccess.enabled} label="Computer access" onChange={(enabled) => void computerAction("enabled", () => window.grokky.setComputerAccessEnabled(enabled))} />
+                  <Switch checked={snapshot.computerAccess.enabled} label={t("set.tab.computer")} onChange={(enabled) => void computerAction("enabled", () => window.grokky.setComputerAccessEnabled(enabled))} />
                 </div>
 
                 <section className="computer-section">
-                  <div className="computer-section-heading"><div><h4>Connected computers</h4><p>Select where Grokky performs local work.</p></div><button type="button" onClick={() => setPairOpen((open) => !open)}><WifiHigh size={14} />Pair</button></div>
+                  <div className="computer-section-heading"><div><h4>{t("cmp.connected")}</h4><p>{t("cmp.connectedDetail")}</p></div><button type="button" onClick={() => setPairOpen((open) => !open)}><WifiHigh size={14} />{t("cmp.pair")}</button></div>
                   <div className="device-list">
                     {snapshot.computerAccess.devices.map((device) => (
                       <div className="device-row-shell" key={device.id}>
@@ -1311,48 +1323,48 @@ function SettingsDialog({ snapshot, conversation, agents, initialTab, onAgentsCh
                           onClick={() => void computerAction(device.id, () => window.grokky.selectComputer(device.id))}
                         >
                           <span className="device-icon">{device.kind === "local" ? <DesktopTower size={18} /> : <Monitor size={18} />}</span>
-                          <span><strong>{device.name}</strong><small>{device.kind === "local" ? "This computer" : device.endpoint} · {device.root}</small></span>
-                          <em className={`device-status ${device.status}`}>{device.status}</em>
+                          <span><strong>{device.name}</strong><small>{device.kind === "local" ? t("cmp.thisComputer") : device.endpoint} · {device.root}</small></span>
+                          <em className={`device-status ${device.status}`}>{tr(device.status)}</em>
                           {snapshot.computerAccess.activeDeviceId === device.id && <ShieldCheck size={17} weight="fill" />}
                         </button>
-                        {device.kind === "remote" && device.status !== "revoked" && <button className="device-revoke" type="button" title={`Revoke ${device.name}`} aria-label={`Revoke ${device.name}`} onClick={() => void computerAction(`revoke:${device.id}`, () => window.grokky.revokeComputer(device.id))}><Trash size={13} /></button>}
+                        {device.kind === "remote" && device.status !== "revoked" && <button className="device-revoke" type="button" title={t("cmp.revoke", { name: device.name })} aria-label={t("cmp.revoke", { name: device.name })} onClick={() => void computerAction(`revoke:${device.id}`, () => window.grokky.revokeComputer(device.id))}><Trash size={13} /></button>}
                       </div>
                     ))}
                   </div>
                   {pairOpen && (
                     <div className="pair-runner-form">
-                      <div><strong>Pair another computer</strong><small>Start Grokky Runner there, then enter its endpoint and six-digit code.</small></div>
-                      <label><span>Runner endpoint</span><input value={runnerEndpoint} onChange={(event) => setRunnerEndpoint(event.target.value)} placeholder="http://100.x.x.x:4747" /></label>
-                      <label><span>Pairing code</span><input value={pairingCode} onChange={(event) => setPairingCode(event.target.value.replace(/\D/g, "").slice(0, 6))} inputMode="numeric" placeholder="000000" /></label>
-                      <div className="pair-runner-actions"><button type="button" onClick={() => setPairOpen(false)}>Cancel</button><button className="primary" type="button" disabled={computerBusy === "pair" || pairingCode.length !== 6 || !runnerEndpoint.trim()} onClick={() => void pairRunner()}>{computerBusy === "pair" ? <InlineLoader label="Pairing computer" /> : <ShieldCheck size={14} />}Pair securely</button></div>
+                      <div><strong>{t("cmp.pairAnother")}</strong><small>{t("cmp.pairDetail")}</small></div>
+                      <label><span>{t("cmp.endpoint")}</span><input value={runnerEndpoint} onChange={(event) => setRunnerEndpoint(event.target.value)} placeholder="http://100.x.x.x:4747" /></label>
+                      <label><span>{t("cmp.code")}</span><input value={pairingCode} onChange={(event) => setPairingCode(event.target.value.replace(/\D/g, "").slice(0, 6))} inputMode="numeric" placeholder="000000" /></label>
+                      <div className="pair-runner-actions"><button type="button" onClick={() => setPairOpen(false)}>{t("cmp.cancel")}</button><button className="primary" type="button" disabled={computerBusy === "pair" || pairingCode.length !== 6 || !runnerEndpoint.trim()} onClick={() => void pairRunner()}>{computerBusy === "pair" ? <InlineLoader label={t("cmp.pairing")} /> : <ShieldCheck size={14} />}{t("cmp.pairSecurely")}</button></div>
                     </div>
                   )}
                 </section>
 
                 <section className={`computer-section ${!snapshot.computerAccess.enabled ? "disabled" : ""}`}>
-                  <div className="computer-section-heading"><div><h4>Capability policy</h4><p>Ask pauses the agent and shows a clear approval card.</p></div></div>
+                  <div className="computer-section-heading"><div><h4>{t("cmp.policy")}</h4><p>{t("cmp.policyDetail")}</p></div></div>
                   <div className="computer-capability-list">
                     {snapshot.computerAccess.capabilities.map((capability) => (
                       <div className={`computer-capability-row ${!capability.available ? "unavailable" : ""}`} key={capability.id}>
                         <span className="computer-capability-icon"><ComputerCapabilityIcon id={capability.id} /></span>
-                        <span className="settings-copy"><strong>{capability.label}</strong><small>{capability.description}<b>{permissionLabel(capability.permission)}</b></small></span>
+                        <span className="settings-copy"><strong>{tr(capability.label)}</strong><small>{tr(capability.description)}<b>{permissionLabel(capability.permission)}</b></small></span>
                         {(capability.id === "screen" || capability.id === "automation") && capability.permission !== "granted" && capability.available && (
-                          <button className="permission-button" type="button" disabled={computerBusy === `permission:${capability.id}`} onClick={() => void computerAction(`permission:${capability.id}`, () => window.grokky.requestComputerPermission(capability.id))}>System access</button>
+                          <button className="permission-button" type="button" disabled={computerBusy === `permission:${capability.id}`} onClick={() => void computerAction(`permission:${capability.id}`, () => window.grokky.requestComputerPermission(capability.id))}>{t("cmp.systemAccess")}</button>
                         )}
-                        <button className="computer-test" type="button" disabled={!snapshot.computerAccess.enabled || !capability.available || capability.level === "blocked" || Boolean(computerBusy)} onClick={() => void computerAction(`test:${capability.id}`, () => window.grokky.testComputerCapability(capability.id))}>{computerBusy === `test:${capability.id}` ? <InlineLoader label={`Testing ${capability.label}`} quiet /> : "Test"}</button>
-                        <SelectMenu value={capability.level} choices={COMPUTER_ACCESS_CHOICES} label={`${capability.label} access`} disabled={!snapshot.computerAccess.enabled || !capability.available || Boolean(computerBusy)} onChange={(level) => void computerAction(`level:${capability.id}`, () => window.grokky.setComputerCapability(capability.id, level))} />
+                        <button className="computer-test" type="button" disabled={!snapshot.computerAccess.enabled || !capability.available || capability.level === "blocked" || Boolean(computerBusy)} onClick={() => void computerAction(`test:${capability.id}`, () => window.grokky.testComputerCapability(capability.id))}>{computerBusy === `test:${capability.id}` ? <InlineLoader label={t("cmp.testing", { label: tr(capability.label) })} quiet /> : t("cmp.test")}</button>
+                        <SelectMenu value={capability.level} choices={COMPUTER_ACCESS_CHOICES} label={t("cmp.levelLabel", { label: tr(capability.label) })} disabled={!snapshot.computerAccess.enabled || !capability.available || Boolean(computerBusy)} onChange={(level) => void computerAction(`level:${capability.id}`, () => window.grokky.setComputerCapability(capability.id, level))} />
                       </div>
                     ))}
                   </div>
                 </section>
 
                 <section className={`computer-section network-section ${!snapshot.computerAccess.enabled ? "disabled" : ""}`}>
-                  <div className="computer-section-heading"><div><h4>Browser allowlist</h4><p>Always-allowed browsing stays within these public domains. One domain per line.</p></div><button type="button" disabled={computerBusy === "network"} onClick={() => void computerAction("network", () => window.grokky.updateComputerNetworkAllowlist(networkDomains.split(/\n|,/).map((domain) => domain.trim()).filter(Boolean)))}>{computerBusy === "network" ? <InlineLoader label="Saving domains" quiet /> : <FloppyDisk size={13} />}Save</button></div>
+                  <div className="computer-section-heading"><div><h4>{t("cmp.allowlist")}</h4><p>{t("cmp.allowlistDetail")}</p></div><button type="button" disabled={computerBusy === "network"} onClick={() => void computerAction("network", () => window.grokky.updateComputerNetworkAllowlist(networkDomains.split(/\n|,/).map((domain) => domain.trim()).filter(Boolean)))}>{computerBusy === "network" ? <InlineLoader label={t("cmp.savingDomains")} quiet /> : <FloppyDisk size={13} />}{t("cmp.save")}</button></div>
                   <textarea value={networkDomains} onChange={(event) => setNetworkDomains(event.target.value)} placeholder={'github.com\ndevelopers.openai.com'} />
                 </section>
 
                 <section className="computer-section audit-section">
-                  <div className="computer-section-heading"><div><h4>Recent computer activity</h4><p>Every allowed and denied action is recorded locally.</p></div><ClockCounterClockwise size={17} /></div>
+                  <div className="computer-section-heading"><div><h4>{t("cmp.recent")}</h4><p>{t("cmp.recentDetail")}</p></div><ClockCounterClockwise size={17} /></div>
                   <div className="computer-audit-list">
                     {snapshot.computerAccess.auditLog.slice(0, 12).map((entry) => (
                       <div className="computer-audit-row" key={entry.id}>
@@ -1361,7 +1373,7 @@ function SettingsDialog({ snapshot, conversation, agents, initialTab, onAgentsCh
                         <time>{timeLabel(entry.createdAt)}</time>
                       </div>
                     ))}
-                    {!snapshot.computerAccess.auditLog.length && <div className="capability-empty">No computer actions yet. Run a capability test to verify the boundary.</div>}
+                    {!snapshot.computerAccess.auditLog.length && <div className="capability-empty">{t("cmp.noActions")}</div>}
                   </div>
                 </section>
               </div>
@@ -1369,21 +1381,21 @@ function SettingsDialog({ snapshot, conversation, agents, initialTab, onAgentsCh
 
             {tab === "skills" && (
               <div className="settings-stack capability-stack">
-                <div className="settings-intro"><h3>Skills available to Codex</h3><p>Disable workflows you do not use. This also keeps the skills context concise.</p></div>
-                <label className="capability-search"><MagnifyingGlass size={15} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search skills" /></label>
-                {!capabilities ? <div className="capability-loading"><InlineLoader label="Loading skills" /><span>Loading skills</span></div> : (
+                <div className="settings-intro"><h3>{t("skl.title")}</h3><p>{t("skl.detail")}</p></div>
+                <label className="capability-search"><MagnifyingGlass size={15} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t("skl.search")} /></label>
+                {!capabilities ? <div className="capability-loading"><InlineLoader label={t("skl.loading")} /><span>{t("skl.loading")}</span></div> : (
                   <div className="capability-list">
                     {filteredSkills.map((skill) => (
                       <div className="capability-row" key={skill.id}>
                         <span className={`capability-kind-icon skill-kind-icon ${skill.enabled ? "enabled" : ""}`} aria-hidden="true"><PuzzlePiece size={17} weight={skill.enabled ? "fill" : "regular"} /></span>
                         <span className="settings-copy"><strong>{skill.name}<em>{scopeLabel(skill)}</em></strong><small>{skill.description}</small></span>
-                        <Switch checked={skill.enabled} disabled={busy === skill.id} label={`${skill.name} skill`} onChange={(enabled) => void toggleCapability(skill.id, () => window.grokky.setSkillEnabled(skill.path, enabled))} />
+                        <Switch checked={skill.enabled} disabled={busy === skill.id} label={t("skl.label", { name: skill.name })} onChange={(enabled) => void toggleCapability(skill.id, () => window.grokky.setSkillEnabled(skill.path, enabled))} />
                       </div>
                     ))}
-                    {!filteredSkills.length && <div className="capability-empty">No skills match that search.</div>}
+                    {!filteredSkills.length && <div className="capability-empty">{t("skl.none")}</div>}
                   </div>
                 )}
-                {capabilities && <p className="settings-note">{capabilities.skills.filter((skill) => skill.enabled).length} of {capabilities.skills.length} skills active. Changes apply on the next Codex turn.</p>}
+                {capabilities && <p className="settings-note">{t("skl.active", { a: capabilities.skills.filter((skill) => skill.enabled).length, n: capabilities.skills.length })}</p>}
               </div>
             )}
 
@@ -1391,69 +1403,69 @@ function SettingsDialog({ snapshot, conversation, agents, initialTab, onAgentsCh
               agentDraft ? (
                 <div className="settings-stack agent-workbench">
                   <div className="agent-editor-header">
-                    <button type="button" onClick={() => { setAgentDraft(null); setEditingAgentId(null); }}><ArrowLeft size={15} />Agents</button>
-                    <div><h3>{editingAgentId ? `Edit ${agentDraft.name}` : "Create an agent"}</h3><p>Give Grokky a reusable specialist with a clear job and boundary.</p></div>
+                    <button type="button" onClick={() => { setAgentDraft(null); setEditingAgentId(null); }}><ArrowLeft size={15} />{t("set.tab.agents")}</button>
+                    <div><h3>{editingAgentId ? t("agt.edit", { name: agentDraft.name }) : t("agt.create")}</h3><p>{t("agt.formDetail")}</p></div>
                   </div>
                   <div className="agent-form">
                     <fieldset className="agent-icon-field">
-                      <legend>Bot profile</legend>
-                      <div className="agent-icon-copy"><BotMascot mood="idle" variant={agentDraft.icon ?? "lime"} size="sm" label={`${AGENT_ICONS.find((icon) => icon.id === (agentDraft.icon ?? "lime"))?.label ?? "Lime"} bot profile`} /><span><strong>Choose a bot</strong><small>This profile stays with the agent when it runs.</small></span></div>
-                      <div className="agent-icon-picker" aria-label="Bot profile choices">
+                      <legend>{t("agt.botProfile")}</legend>
+                      <div className="agent-icon-copy"><BotMascot mood="idle" variant={agentDraft.icon ?? "lime"} size="sm" label={t("agt.botProfileLabel", { name: tr(AGENT_ICONS.find((icon) => icon.id === (agentDraft.icon ?? "lime"))?.label ?? "Lime") })} /><span><strong>{t("agt.chooseBot")}</strong><small>{t("agt.botDetail")}</small></span></div>
+                      <div className="agent-icon-picker" aria-label={t("agt.botChoices")}>
                         {AGENT_ICONS.map((icon) => (
-                          <button key={icon.id} type="button" className={(agentDraft.icon ?? "lime") === icon.id ? "selected" : ""} aria-label={icon.label} aria-pressed={(agentDraft.icon ?? "lime") === icon.id} title={icon.label} onClick={() => setAgentDraft({ ...agentDraft, icon: icon.id })}>
+                          <button key={icon.id} type="button" className={(agentDraft.icon ?? "lime") === icon.id ? "selected" : ""} aria-label={tr(icon.label)} aria-pressed={(agentDraft.icon ?? "lime") === icon.id} title={tr(icon.label)} onClick={() => setAgentDraft({ ...agentDraft, icon: icon.id })}>
                             <BotMascot mood="idle" variant={icon.id} size="xs" />
                           </button>
                         ))}
                       </div>
                     </fieldset>
-                    <label className="agent-field"><span>Name</span><input value={agentDraft.name} autoFocus onChange={(event) => setAgentDraft({ ...agentDraft, name: event.target.value })} placeholder="qa_scout" /></label>
-                    <label className="agent-field"><span>Description</span><input value={agentDraft.description} onChange={(event) => setAgentDraft({ ...agentDraft, description: event.target.value })} placeholder="When should Grokky choose this agent?" /></label>
-                    <label className="agent-field agent-instructions"><span>Instructions</span><textarea value={agentDraft.developerInstructions} onChange={(event) => setAgentDraft({ ...agentDraft, developerInstructions: event.target.value })} placeholder="Describe the role, method, constraints, and expected result." /></label>
+                    <label className="agent-field"><span>{t("agt.name")}</span><input value={agentDraft.name} autoFocus onChange={(event) => setAgentDraft({ ...agentDraft, name: event.target.value })} placeholder="qa_scout" /></label>
+                    <label className="agent-field"><span>{t("agt.description")}</span><input value={agentDraft.description} onChange={(event) => setAgentDraft({ ...agentDraft, description: event.target.value })} placeholder={t("agt.descriptionPlaceholder")} /></label>
+                    <label className="agent-field agent-instructions"><span>{t("agt.instructions")}</span><textarea value={agentDraft.developerInstructions} onChange={(event) => setAgentDraft({ ...agentDraft, developerInstructions: event.target.value })} placeholder={t("agt.instructionsPlaceholder")} /></label>
                     <div className="agent-form-grid">
-                      <div className="agent-field"><span>Scope</span><SelectMenu value={agentDraft.scope} choices={AGENT_SCOPE_CHOICES} label="Agent scope" disabled={Boolean(editingAgentId)} onChange={(scope) => setAgentDraft({ ...agentDraft, scope })} /></div>
-                      <div className="agent-field"><span>Model</span><SelectMenu value={agentDraft.model ?? ""} choices={OPTIONAL_MODEL_CHOICES} label="Agent model" onChange={(model) => setAgentDraft({ ...agentDraft, model: model || undefined })} /></div>
-                      <div className="agent-field"><span>Reasoning</span><SelectMenu value={agentDraft.reasoning ?? ""} choices={OPTIONAL_REASONING_CHOICES} label="Agent reasoning" onChange={(reasoning) => setAgentDraft({ ...agentDraft, reasoning: reasoning || undefined })} /></div>
-                      <div className="agent-field"><span>Workspace</span><SelectMenu value={agentDraft.sandboxMode ?? ""} choices={OPTIONAL_SANDBOX_CHOICES} label="Agent workspace permission" onChange={(sandboxMode) => setAgentDraft({ ...agentDraft, sandboxMode: sandboxMode || undefined })} /></div>
+                      <div className="agent-field"><span>{t("agt.scope")}</span><SelectMenu value={agentDraft.scope} choices={AGENT_SCOPE_CHOICES} label={t("agt.scopeAria")} disabled={Boolean(editingAgentId)} onChange={(scope) => setAgentDraft({ ...agentDraft, scope })} /></div>
+                      <div className="agent-field"><span>{t("agt.model")}</span><SelectMenu value={agentDraft.model ?? ""} choices={OPTIONAL_MODEL_CHOICES} label={t("agt.modelAria")} onChange={(model) => setAgentDraft({ ...agentDraft, model: model || undefined })} /></div>
+                      <div className="agent-field"><span>{t("agt.reasoning")}</span><SelectMenu value={agentDraft.reasoning ?? ""} choices={OPTIONAL_REASONING_CHOICES} label={t("agt.reasoningAria")} onChange={(reasoning) => setAgentDraft({ ...agentDraft, reasoning: reasoning || undefined })} /></div>
+                      <div className="agent-field"><span>{t("set.group.workspace")}</span><SelectMenu value={agentDraft.sandboxMode ?? ""} choices={OPTIONAL_SANDBOX_CHOICES} label={t("agt.workspaceAria")} onChange={(sandboxMode) => setAgentDraft({ ...agentDraft, sandboxMode: sandboxMode || undefined })} /></div>
                     </div>
                   </div>
                   <div className="agent-editor-actions">
-                    {editingAgentId && <button className="agent-delete" type="button" disabled={agentBusy} onClick={() => void removeAgent()}><Trash size={14} />Delete</button>}
+                    {editingAgentId && <button className="agent-delete" type="button" disabled={agentBusy} onClick={() => void removeAgent()}><Trash size={14} />{t("agt.delete")}</button>}
                     <span />
-                    <button type="button" disabled={agentBusy} onClick={() => { setAgentDraft(null); setEditingAgentId(null); }}>Cancel</button>
-                    <button className="agent-save" type="button" disabled={agentBusy || !agentDraft.name.trim() || !agentDraft.description.trim() || !agentDraft.developerInstructions.trim()} onClick={() => void saveAgent()}>{agentBusy ? <InlineLoader label="Saving agent" /> : <FloppyDisk size={14} />}Save agent</button>
+                    <button type="button" disabled={agentBusy} onClick={() => { setAgentDraft(null); setEditingAgentId(null); }}>{t("cmp.cancel")}</button>
+                    <button className="agent-save" type="button" disabled={agentBusy || !agentDraft.name.trim() || !agentDraft.description.trim() || !agentDraft.developerInstructions.trim()} onClick={() => void saveAgent()}>{agentBusy ? <InlineLoader label={t("agt.saving")} /> : <FloppyDisk size={14} />}{t("agt.save")}</button>
                   </div>
                 </div>
               ) : (
                 <div className="settings-stack agent-workbench">
-                  <div className="capability-hero agent-hero"><BotMascot mood="working" identity="builder" size="lg" /><div><h3>Build a crew around the job</h3><p>Choose specialists per chat. Grokky shows their work live and brings their findings back to one lead.</p><button type="button" onClick={() => beginAgentDraft({ name: "", description: "", developerInstructions: "", scope: "personal", icon: "lime" })}><UserPlus size={15} />New agent</button></div></div>
+                  <div className="capability-hero agent-hero"><BotMascot mood="working" identity="builder" size="lg" /><div><h3>{t("agt.heroTitle")}</h3><p>{t("agt.heroDetail")}</p><button type="button" onClick={() => beginAgentDraft({ name: "", description: "", developerInstructions: "", scope: "personal", icon: "lime" })}><UserPlus size={15} />{t("agt.new")}</button></div></div>
                   <div className="settings-row">
-                    <span className="settings-copy"><strong>Multi-agent orchestration</strong><small>Use native Codex subagents or parallel OpenRouter scouts.</small></span>
-                    <Switch checked={snapshot.settings.multiAgentEnabled} label="Multi-agent orchestration" onChange={(checked) => void patchSettings({ multiAgentEnabled: checked })} />
+                    <span className="settings-copy"><strong>{t("agt.multi")}</strong><small>{t("agt.multiDetail")}</small></span>
+                    <Switch checked={snapshot.settings.multiAgentEnabled} label={t("agt.multi")} onChange={(checked) => void patchSettings({ multiAgentEnabled: checked })} />
                   </div>
                   <div className={`settings-row ${!snapshot.settings.multiAgentEnabled ? "disabled" : ""}`}>
-                    <span className="settings-copy"><strong>Parallel workers</strong><small>Maximum crew members that may run at once.</small></span>
-                    <SelectMenu value={snapshot.settings.maxAgentThreads} choices={MAX_AGENT_CHOICES} label="Maximum parallel workers" disabled={!snapshot.settings.multiAgentEnabled} onChange={(maxAgentThreads) => void patchSettings({ maxAgentThreads })} />
+                    <span className="settings-copy"><strong>{t("agt.parallel")}</strong><small>{t("agt.parallelDetail")}</small></span>
+                    <SelectMenu value={snapshot.settings.maxAgentThreads} choices={maxAgentChoices()} label={t("agt.parallelAria")} disabled={!snapshot.settings.multiAgentEnabled} onChange={(maxAgentThreads) => void patchSettings({ maxAgentThreads })} />
                   </div>
                   <div className="agent-form-grid agent-defaults">
-                    <div className="agent-field"><span>Default subagent model</span><SelectMenu value={snapshot.settings.defaultSubagentModel} choices={OPTIONAL_MODEL_CHOICES} label="Default subagent model" disabled={!snapshot.settings.multiAgentEnabled} onChange={(defaultSubagentModel) => void patchSettings({ defaultSubagentModel })} /></div>
-                    <div className="agent-field"><span>Default reasoning</span><SelectMenu value={snapshot.settings.defaultSubagentReasoning} choices={OPTIONAL_REASONING_CHOICES} label="Default subagent reasoning" disabled={!snapshot.settings.multiAgentEnabled} onChange={(defaultSubagentReasoning) => void patchSettings({ defaultSubagentReasoning })} /></div>
+                    <div className="agent-field"><span>{t("agt.defaultModel")}</span><SelectMenu value={snapshot.settings.defaultSubagentModel} choices={OPTIONAL_MODEL_CHOICES} label={t("agt.defaultModel")} disabled={!snapshot.settings.multiAgentEnabled} onChange={(defaultSubagentModel) => void patchSettings({ defaultSubagentModel })} /></div>
+                    <div className="agent-field"><span>{t("agt.defaultReasoning")}</span><SelectMenu value={snapshot.settings.defaultSubagentReasoning} choices={OPTIONAL_REASONING_CHOICES} label={t("agt.defaultReasoningAria")} disabled={!snapshot.settings.multiAgentEnabled} onChange={(defaultSubagentReasoning) => void patchSettings({ defaultSubagentReasoning })} /></div>
                   </div>
                   <div className={`settings-row ${!snapshot.settings.multiAgentEnabled ? "disabled" : ""}`}>
-                    <span className="settings-copy"><strong>Agent updates in chat</strong><small>Let Codex announce delegation and handoffs as they happen.</small></span>
-                    <Switch checked={snapshot.settings.interruptAgentMessage} disabled={!snapshot.settings.multiAgentEnabled} label="Agent updates in chat" onChange={(checked) => void patchSettings({ interruptAgentMessage: checked })} />
+                    <span className="settings-copy"><strong>{t("agt.updates")}</strong><small>{t("agt.updatesDetail")}</small></span>
+                    <Switch checked={snapshot.settings.interruptAgentMessage} disabled={!snapshot.settings.multiAgentEnabled} label={t("agt.updates")} onChange={(checked) => void patchSettings({ interruptAgentMessage: checked })} />
                   </div>
                   <section className="agent-template-section">
-                    <div className="agent-roster-header"><span><strong>Quick start</strong><small>Make one yours, then tune it.</small></span></div>
-                    <div className="agent-template-strip">{AGENT_TEMPLATES.map((template) => <button key={template.label} type="button" onClick={() => beginAgentDraft(template)}><BotMascot mood="idle" identity={template.name} variant={template.icon} size="xs" /><span><strong>{template.label}</strong><small>{template.description}</small></span><Plus size={14} /></button>)}</div>
+                    <div className="agent-roster-header"><span><strong>{t("agt.quick")}</strong><small>{t("agt.quickDetail")}</small></span></div>
+                    <div className="agent-template-strip">{AGENT_TEMPLATES.map((template) => <button key={template.label} type="button" onClick={() => beginAgentDraft(template)}><BotMascot mood="idle" identity={template.name} variant={template.icon} size="xs" /><span><strong>{tr(template.label)}</strong><small>{tr(template.description)}</small></span><Plus size={14} /></button>)}</div>
                   </section>
                   <section className="agent-roster">
-                    <div className="agent-roster-header"><span><strong>Your agents</strong><small>{agents.length} available in this workspace</small></span><button type="button" onClick={() => beginAgentDraft({ name: "", description: "", developerInstructions: "", scope: "personal", icon: "lime" })}><Plus size={14} />New</button></div>
+                    <div className="agent-roster-header"><span><strong>{t("agt.yours")}</strong><small>{t("agt.available", { n: agents.length })}</small></span><button type="button" onClick={() => beginAgentDraft({ name: "", description: "", developerInstructions: "", scope: "personal", icon: "lime" })}><Plus size={14} />{t("agt.newShort")}</button></div>
                     <div className="agent-definition-list">
                       {agents.map((agent) => (
                         <button className="agent-definition-row" type="button" key={agent.id} onClick={() => editAgent(agent)}>
                           <BotMascot mood="idle" identity={agent.name || agent.id} variant={agent.icon} size="xs" />
-                          <span className="settings-copy"><strong>{agent.name}<em>{agent.scope}</em></strong><small>{agent.description}</small></span>
-                          {agent.builtIn ? <span className="agent-row-action"><Copy size={14} />Duplicate</span> : <span className="agent-row-action">Edit<ArrowUpRight size={13} /></span>}
+                          <span className="settings-copy"><strong>{agent.name}<em>{tr(agent.scope)}</em></strong><small>{tr(agent.description)}</small></span>
+                          {agent.builtIn ? <span className="agent-row-action"><Copy size={14} />{t("agt.duplicate")}</span> : <span className="agent-row-action">{t("agt.editShort")}<ArrowUpRight size={13} /></span>}
                         </button>
                       ))}
                     </div>
@@ -1464,43 +1476,43 @@ function SettingsDialog({ snapshot, conversation, agents, initialTab, onAgentsCh
 
             {tab === "mcp" && (
               <div className="settings-stack capability-stack">
-                <div className="settings-intro"><h3>Configured MCP servers</h3><p>Grokky inherits the same local Codex MCP configuration.</p></div>
-                {!capabilities ? <div className="capability-loading"><InlineLoader label="Loading servers" /><span>Loading servers</span></div> : (
+                <div className="settings-intro"><h3>{t("mcp.title")}</h3><p>{t("mcp.detail")}</p></div>
+                {!capabilities ? <div className="capability-loading"><InlineLoader label={t("mcp.loading")} /><span>{t("mcp.loading")}</span></div> : (
                   <div className="capability-list">
                     {capabilities.mcpServers.map((server) => (
                       <div className="capability-row" key={server.id}>
                         <span className="settings-row-icon"><PlugsConnected size={18} /></span>
                         <span className="settings-copy"><strong>{server.name}<em>{server.transport}</em></strong><small>{server.id}</small></span>
-                        <Switch checked={server.enabled} disabled={busy === server.id} label={`${server.name} MCP server`} onChange={(enabled) => void toggleCapability(server.id, () => window.grokky.setMcpEnabled(server.id, enabled))} />
+                        <Switch checked={server.enabled} disabled={busy === server.id} label={t("mcp.label", { name: server.name })} onChange={(enabled) => void toggleCapability(server.id, () => window.grokky.setMcpEnabled(server.id, enabled))} />
                       </div>
                     ))}
-                    {!capabilities.mcpServers.length && <div className="capability-empty">No MCP servers are configured.</div>}
+                    {!capabilities.mcpServers.length && <div className="capability-empty">{t("mcp.none")}</div>}
                   </div>
                 )}
-                <p className="settings-note">Local and remote MCP tools are available to Codex when their own approval policy allows them.</p>
+                <p className="settings-note">{t("mcp.note")}</p>
               </div>
             )}
 
             {tab === "connectors" && (
               <div className="settings-stack capability-stack">
-                <div className="settings-intro"><h3>Plugins and connectors</h3><p>Use installed Codex plugins and their bundled tools inside Grokky.</p></div>
+                <div className="settings-intro"><h3>{t("con.title")}</h3><p>{t("con.detail")}</p></div>
                 <div className="settings-row">
-                  <span className="settings-copy"><strong>Connector runtime</strong><small>Enable plugins, remote tools, and network-backed connectors for Codex.</small></span>
-                  <Switch checked={snapshot.settings.connectorsEnabled} label="Connector runtime" onChange={(checked) => void patchSettings({ connectorsEnabled: checked })} />
+                  <span className="settings-copy"><strong>{t("con.runtime")}</strong><small>{t("con.runtimeDetail")}</small></span>
+                  <Switch checked={snapshot.settings.connectorsEnabled} label={t("con.runtime")} onChange={(checked) => void patchSettings({ connectorsEnabled: checked })} />
                 </div>
-                {!capabilities ? <div className="capability-loading"><InlineLoader label="Loading connectors" /><span>Loading connectors</span></div> : (
+                {!capabilities ? <div className="capability-loading"><InlineLoader label={t("con.loading")} /><span>{t("con.loading")}</span></div> : (
                   <div className={`capability-list ${!snapshot.settings.connectorsEnabled ? "disabled" : ""}`}>
                     {capabilities.connectors.map((connector) => (
                       <div className="capability-row" key={connector.id}>
                         <span className="settings-row-icon"><Robot size={18} /></span>
                         <span className="settings-copy"><strong>{connector.name}</strong><small>{connector.id}</small></span>
-                        <Switch checked={connector.enabled} disabled={!snapshot.settings.connectorsEnabled || busy === connector.id} label={`${connector.name} connector`} onChange={(enabled) => void toggleCapability(connector.id, () => window.grokky.setConnectorEnabled(connector.id, enabled))} />
+                        <Switch checked={connector.enabled} disabled={!snapshot.settings.connectorsEnabled || busy === connector.id} label={t("con.label", { name: connector.name })} onChange={(enabled) => void toggleCapability(connector.id, () => window.grokky.setConnectorEnabled(connector.id, enabled))} />
                       </div>
                     ))}
-                    {!capabilities.connectors.length && <div className="capability-empty">No connector plugins are installed.</div>}
+                    {!capabilities.connectors.length && <div className="capability-empty">{t("con.none")}</div>}
                   </div>
                 )}
-                <p className="settings-note">This applies to Codex sessions. OpenRouter uses Grokky's built-in workspace tools.</p>
+                <p className="settings-note">{t("con.note")}</p>
               </div>
             )}
           </div>
@@ -1532,13 +1544,13 @@ function DeleteConversationDialog({ title, busy, onCancel, onConfirm }: {
       <section className="delete-dialog" role="alertdialog" aria-modal="true" aria-labelledby="delete-chat-title" aria-describedby="delete-chat-description">
         <div className="delete-dialog-icon"><Trash size={18} weight="fill" /></div>
         <div className="delete-dialog-copy">
-          <span>Delete chat</span>
-          <h2 id="delete-chat-title">Remove this conversation?</h2>
-          <p id="delete-chat-description"><strong>“{title}”</strong> and its messages, work log, and crew history will be permanently removed from this computer.</p>
+          <span>{t("hdr.deleteChat")}</span>
+          <h2 id="delete-chat-title">{t("del.title")}</h2>
+          <p id="delete-chat-description"><strong>“{title}”</strong> {t("del.body")}</p>
         </div>
         <footer>
-          <button ref={cancelRef} className="delete-cancel" type="button" disabled={busy} onClick={onCancel}>Cancel</button>
-          <button className="delete-confirm" type="button" disabled={busy} onClick={onConfirm}><Trash size={14} weight="fill" />{busy ? "Deleting…" : "Delete chat"}</button>
+          <button ref={cancelRef} className="delete-cancel" type="button" disabled={busy} onClick={onCancel}>{t("cmp.cancel")}</button>
+          <button className="delete-confirm" type="button" disabled={busy} onClick={onConfirm}><Trash size={14} weight="fill" />{busy ? t("del.deleting") : t("hdr.deleteChat")}</button>
         </footer>
       </section>
     </div>
@@ -1561,15 +1573,15 @@ function ComputerApprovalDialog({ request, busy, onDecision }: {
       <section className="computer-approval-dialog" role="alertdialog" aria-modal="true" aria-labelledby="computer-approval-title" aria-describedby="computer-approval-description">
         <div className="computer-approval-bot"><BotMascot mood="thinking" identity={`approval:${request.capability}`} size="md" /></div>
         <div className="computer-approval-copy">
-          <span>Computer permission</span>
-          <h2 id="computer-approval-title">Grokky wants to use {request.deviceName}</h2>
-          <p id="computer-approval-description">Approve <strong>{request.action}</strong> for <code>{request.target}</code>.</p>
-          <small>{request.capability} access · this action is recorded in the local activity log</small>
+          <span>{t("apr.kicker")}</span>
+          <h2 id="computer-approval-title">{t("apr.title", { name: request.deviceName })}</h2>
+          <p id="computer-approval-description">{t("apr.prefix")} <strong>{request.action}</strong> {t("apr.for")} <code>{request.target}</code>.</p>
+          <small>{t("apr.footer", { capability: request.capability })}</small>
         </div>
         <footer>
-          <button ref={denyRef} type="button" disabled={busy} onClick={() => onDecision("deny")}>Deny</button>
-          <button type="button" disabled={busy} onClick={() => onDecision("allow-once")}>Allow once</button>
-          <button className="primary" type="button" disabled={busy} onClick={() => onDecision("allow-session")}>{busy ? <InlineLoader label="Applying approval" /> : <ShieldCheck size={14} />}Allow for this chat</button>
+          <button ref={denyRef} type="button" disabled={busy} onClick={() => onDecision("deny")}>{t("apr.deny")}</button>
+          <button type="button" disabled={busy} onClick={() => onDecision("allow-once")}>{t("apr.once")}</button>
+          <button className="primary" type="button" disabled={busy} onClick={() => onDecision("allow-session")}>{busy ? <InlineLoader label={t("apr.applying")} /> : <ShieldCheck size={14} />}{t("apr.session")}</button>
         </footer>
       </section>
     </div>
@@ -1577,6 +1589,7 @@ function ComputerApprovalDialog({ request, busy, onDecision }: {
 }
 
 export function App() {
+  useStrings();
   const [snapshot, setSnapshot] = useState<AppSnapshot | null>(null);
   const [agents, setAgents] = useState<AgentDefinition[]>([]);
   const [search, setSearch] = useState("");
@@ -1604,27 +1617,27 @@ export function App() {
 
   useEffect(() => {
     if (!activeWorkingDirectory) return;
-    void window.grokky.getAgents().then(setAgents).catch((error) => setUiError(error instanceof Error ? error.message : "Agents could not be loaded"));
+    void window.grokky.getAgents().then(setAgents).catch((error) => setUiError(error instanceof Error ? error.message : t("agt.loadFailed")));
   }, [snapshot?.activeConversationId, activeWorkingDirectory]);
 
   const active = snapshot?.conversations.find((item) => item.id === snapshot.activeConversationId) ?? snapshot?.conversations[0];
   const filtered = useMemo(() => snapshot?.conversations.filter((item) => item.title.toLowerCase().includes(search.toLowerCase())) ?? [], [snapshot?.conversations, search]);
 
   if (!snapshot || !active) {
-    return <div className="loading-screen"><span className="loading-halo" /><BotMascot mood="thinking" size="lg" label="Grokky is waking up" /><strong>Waking Grokky</strong><InlineLoader label="Loading workspace" /></div>;
+    return <div className="loading-screen"><span className="loading-halo" /><BotMascot mood="thinking" size="lg" label={t("load.wakingLabel")} /><strong>{t("load.waking")}</strong><InlineLoader label={t("load.workspace")} /></div>;
   }
 
   async function updateProvider(provider: ProviderId) {
     try {
       await window.grokky.updateConversation(active!.id, { provider });
     } catch (error) {
-      setUiError(error instanceof Error ? error.message : "Provider could not be changed");
+      setUiError(error instanceof Error ? error.message : t("prov.changeFailed"));
     }
   }
 
   function requestDelete(conversation: Conversation) {
     if (conversation.status === "running") {
-      setUiError("Stop the current run before deleting this chat");
+      setUiError(t("del.stopFirst"));
       return;
     }
     setPendingDelete({ id: conversation.id, title: conversation.title });
@@ -1637,7 +1650,7 @@ export function App() {
       await window.grokky.deleteConversation(pendingDelete.id);
       setPendingDelete(null);
     } catch (error) {
-      setUiError(error instanceof Error ? error.message : "Session could not be deleted");
+      setUiError(error instanceof Error ? error.message : t("del.failed"));
     } finally {
       setDeleteBusy(false);
     }
@@ -1649,7 +1662,7 @@ export function App() {
     try {
       await window.grokky.resolveComputerApproval(request.id, decision);
     } catch (error) {
-      setUiError(error instanceof Error ? error.message : "Computer approval could not be resolved");
+      setUiError(error instanceof Error ? error.message : t("apr.failed"));
     } finally {
       setApprovalBusy(false);
     }
@@ -1664,28 +1677,28 @@ export function App() {
         <div className="window-drag" />
         <div className="brand-row">
           <BrandMark />
-          <div><strong>Grokky</strong><span>Local agent workspace</span></div>
-          <button className="icon-button new-session" type="button" title="New session" onClick={() => void window.grokky.createConversation()}><Plus size={18} /></button>
+          <div><strong>Grokky</strong><span>{t("nav.localWorkspace")}</span></div>
+          <button className="icon-button new-session" type="button" title={t("nav.newSession")} onClick={() => void window.grokky.createConversation()}><Plus size={18} /></button>
         </div>
         <label className="search-box">
           <MagnifyingGlass size={15} />
-          <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search" aria-label="Search sessions" />
+          <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t("nav.search")} aria-label={t("nav.searchSessions")} />
           {search && <button type="button" onClick={() => setSearch("")}><X size={13} /></button>}
         </label>
-        <nav className="session-list" aria-label="Conversations">
+        <nav className="session-list" data-label={t("nav.recentRuns")} aria-label={t("nav.conversations")}>
           {filtered.map((conversation) => (
             <div className="session-entry" key={conversation.id}>
               <button className={`session-item ${conversation.id === active.id ? "active" : ""}`} type="button" onClick={() => void window.grokky.setActiveConversation(conversation.id)}>
                 <BotMascot mood={conversationMood(conversation)} identity={`conversation:${conversation.id}`} size="xs" />
-                <span><strong>{conversation.title}</strong><small>{providerName(conversation.provider)}<i />{timeLabel(conversation.updatedAt)}</small></span>
-                {conversation.status === "running" && <InlineLoader label={`${conversation.title} is running`} quiet />}
+                <span><strong>{tr(conversation.title)}</strong><small>{providerName(conversation.provider)}<i />{timeLabel(conversation.updatedAt)}</small></span>
+                {conversation.status === "running" && <InlineLoader label={t("nav.sessionRunning", { title: tr(conversation.title) })} quiet />}
               </button>
               {conversation.status !== "running" && conversation.id === active.id && (
                 <button
                   className="session-delete"
                   type="button"
-                  title={`Delete ${conversation.title}`}
-                  aria-label={`Delete ${conversation.title}`}
+                  title={t("nav.deleteTitle", { title: tr(conversation.title) })}
+                  aria-label={t("nav.deleteTitle", { title: tr(conversation.title) })}
                   onPointerDown={(event) => event.stopPropagation()}
                   onClick={(event) => {
                     event.stopPropagation();
@@ -1699,10 +1712,10 @@ export function App() {
           ))}
         </nav>
         <div className="sidebar-footer">
-          <button type="button" data-settings-tab="agents" onClick={() => setSettingsTab("agents")}><UsersThree size={17} />Crew</button>
-          <button type="button" data-settings-tab="computer" onClick={() => setSettingsTab("computer")}><DesktopTower size={17} />Computer</button>
-          <button type="button" data-settings-tab="skills" onClick={() => setSettingsTab("skills")}><PuzzlePiece size={17} />Skills & tools</button>
-          <button type="button" data-settings-tab="session" onClick={() => setSettingsTab("session")}><GearSix size={17} />Settings</button>
+          <button type="button" data-settings-tab="agents" onClick={() => setSettingsTab("agents")}><UsersThree size={17} />{t("nav.crew")}</button>
+          <button type="button" data-settings-tab="computer" onClick={() => setSettingsTab("computer")}><DesktopTower size={17} />{t("nav.computer")}</button>
+          <button type="button" data-settings-tab="skills" onClick={() => setSettingsTab("skills")}><PuzzlePiece size={17} />{t("nav.skillsTools")}</button>
+          <button type="button" data-settings-tab="session" onClick={() => setSettingsTab("session")}><GearSix size={17} />{t("nav.settings")}</button>
         </div>
       </aside>
 
@@ -1711,11 +1724,11 @@ export function App() {
           <div className="toolbar-drag" />
           <div className="chat-identity">
             <BotMascot mood={conversationMood(active)} identity={`conversation:${active.id}`} size="xs" />
-            <span><strong>{active.title}</strong><small>{active.projectMode === "project" ? compactPath(active.workingDirectory) : "No project selected"}</small></span>
+            <span><strong>{tr(active.title)}</strong><small>{active.projectMode === "project" ? compactPath(active.workingDirectory) : t("hdr.noProject")}</small></span>
           </div>
           <div className="toolbar-controls">
-            <div className="toolbar-rail" aria-label="Run configuration">
-              <div className="provider-switch" aria-label="Provider">
+            <div className="toolbar-rail" aria-label={t("hdr.runConfig")}>
+              <div className="provider-switch" aria-label={t("hdr.provider")}>
                 <button type="button" aria-pressed={active.provider === "codex"} className={active.provider === "codex" ? "active" : ""} onClick={() => void updateProvider("codex")}><span aria-hidden="true" />Codex</button>
                 <button type="button" aria-pressed={active.provider === "openrouter"} className={active.provider === "openrouter" ? "active" : ""} onClick={() => void updateProvider("openrouter")}><span aria-hidden="true" />OpenRouter</button>
               </div>
@@ -1723,22 +1736,22 @@ export function App() {
               <div className="toolbar-field model-field">
                 <Robot size={15} weight="duotone" />
                 {active.provider === "codex" ? (
-                  <SelectMenu value={active.model} choices={CODEX_MODEL_CHOICES} label="Codex model" compact disabled={active.status === "running"} onChange={(model) => void window.grokky.updateConversation(active.id, { model }).catch((error) => setUiError(error.message))} />
+                  <SelectMenu value={active.model} choices={CODEX_MODEL_CHOICES} label={t("hdr.codexModel")} compact disabled={active.status === "running"} onChange={(model) => void window.grokky.updateConversation(active.id, { model }).catch((error) => setUiError(error.message))} />
                 ) : (
-                  <ModelCombobox value={active.model} suggestions={OPENROUTER_SUGGESTIONS} label="OpenRouter model" disabled={active.status === "running"} onCommit={(model) => void window.grokky.updateConversation(active.id, { model }).catch((error) => setUiError(error.message))} />
+                  <ModelCombobox value={active.model} suggestions={OPENROUTER_SUGGESTIONS} label={t("hdr.openRouterModel")} disabled={active.status === "running"} onCommit={(model) => void window.grokky.updateConversation(active.id, { model }).catch((error) => setUiError(error.message))} />
                 )}
               </div>
               <i className="toolbar-separator" aria-hidden="true" />
               <div className="toolbar-field reasoning-field">
                 <Brain size={15} weight="duotone" />
-                <SelectMenu value={active.reasoning} choices={REASONING_CHOICES} label="Reasoning effort" compact disabled={active.status === "running"} onChange={(reasoning) => void window.grokky.updateConversation(active.id, { reasoning }).catch((error) => setUiError(error.message))} />
+                <SelectMenu value={active.reasoning} choices={REASONING_CHOICES} label={t("hdr.reasoningEffort")} compact disabled={active.status === "running"} onChange={(reasoning) => void window.grokky.updateConversation(active.id, { reasoning }).catch((error) => setUiError(error.message))} />
               </div>
             </div>
-            <div className="toolbar-actions" aria-label="Session actions">
-              <button className={`icon-button computer-toolbar ${snapshot.computerAccess.enabled && activeDevice?.status === "online" ? "connected" : ""}`} data-tooltip={snapshot.computerAccess.enabled ? `Computer: ${activeDevice?.name || "Unavailable"}` : "Computer access is off"} aria-label={snapshot.computerAccess.enabled ? `Computer: ${activeDevice?.name || "Unavailable"}` : "Computer access is off"} type="button" onClick={() => setSettingsTab("computer")}><DesktopTower size={17} weight="duotone" /></button>
-              {!activeStatus?.ready && <button className="icon-button setup-warning" data-tooltip={activeStatus?.detail || "Provider needs setup"} aria-label={activeStatus?.detail || "Provider needs setup"} type="button" onClick={() => setSettingsTab("session")}><WarningCircle size={17} /></button>}
-              <button className="icon-button" data-tooltip="Session settings" aria-label="Session settings" type="button" onClick={() => setSettingsTab("session")}><GearSix size={17} /></button>
-              <button className="icon-button danger" data-tooltip={active.status === "running" ? "Stop the run before deleting this chat" : "Delete chat"} aria-label={active.status === "running" ? "Stop the run before deleting this chat" : "Delete chat"} type="button" onClick={() => requestDelete(active)} disabled={active.status === "running"}><Trash size={16} /></button>
+            <div className="toolbar-actions" aria-label={t("hdr.sessionActions")}>
+              <button className={`icon-button computer-toolbar ${snapshot.computerAccess.enabled && activeDevice?.status === "online" ? "connected" : ""}`} data-tooltip={snapshot.computerAccess.enabled ? t("hdr.computerName", { name: activeDevice?.name || t("hdr.unavailable") }) : t("hdr.computerOff")} aria-label={snapshot.computerAccess.enabled ? t("hdr.computerName", { name: activeDevice?.name || t("hdr.unavailable") }) : t("hdr.computerOff")} type="button" onClick={() => setSettingsTab("computer")}><DesktopTower size={17} weight="duotone" /></button>
+              {!activeStatus?.ready && <button className="icon-button setup-warning" data-tooltip={tr(activeStatus?.detail ?? "") || t("hdr.providerNeedsSetup")} aria-label={tr(activeStatus?.detail ?? "") || t("hdr.providerNeedsSetup")} type="button" onClick={() => setSettingsTab("session")}><WarningCircle size={17} /></button>}
+              <button className="icon-button" data-tooltip={t("hdr.sessionSettings")} aria-label={t("hdr.sessionSettings")} type="button" onClick={() => setSettingsTab("session")}><GearSix size={17} /></button>
+              <button className="icon-button danger" data-tooltip={active.status === "running" ? t("hdr.stopBeforeDelete") : t("hdr.deleteChat")} aria-label={active.status === "running" ? t("hdr.stopBeforeDelete") : t("hdr.deleteChat")} type="button" onClick={() => requestDelete(active)} disabled={active.status === "running"}><Trash size={16} /></button>
             </div>
           </div>
         </header>
