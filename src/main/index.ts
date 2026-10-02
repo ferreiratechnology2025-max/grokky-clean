@@ -44,9 +44,9 @@ async function createWindow(controller: MainController): Promise<void> {
   });
 
   controller.attachWindow(mainWindow);
+  mainWindow.once("ready-to-show", () => mainWindow?.show());
   if (process.env.ELECTRON_RENDERER_URL) await mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL);
   else await mainWindow.loadFile(join(__dirname, "../renderer/index.html"));
-  mainWindow.once("ready-to-show", () => mainWindow?.show());
 }
 
 app.whenReady().then(async () => {
