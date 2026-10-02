@@ -406,6 +406,22 @@ export const en = {
   "tpl.clean.reviewer": "Reviewer focused on correctness, security, regressions, and missing tests.",
   "tpl.clean.builder": "Implementation-focused agent for bounded features, fixes, and validation.",
   "tpl.clean.tester": "Quality agent for reproducing failures, testing edge cases, and collecting evidence.",
+  "hdr.compatModel": "OpenAI-compatible model",
+  "set.compat.preset": "Preset",
+  "set.compat.presetAria": "OpenAI-compatible preset",
+  "set.compat.presetAgnes": "Agnes",
+  "set.compat.presetCustom": "Custom",
+  "set.compat.endpoint": "Endpoint",
+  "set.compat.endpointHint": "https, or http only for localhost",
+  "set.compat.endpointFixed": "Fixed by the Agnes preset",
+  "set.compat.model": "Default model",
+  "set.compat.credential": "Key file ({name})",
+  "set.compat.statusReady": "Ready · source: {source} · endpoint {host}",
+  "set.compat.statusNotReady": "Not ready · {detail}",
+  "prov.agnesMissingDetail": "Set AGNES_API_KEY or choose an env file containing it.",
+  "prov.customMissingDetail": "Enter an https endpoint, or http for localhost.",
+  "prov.customNoKeyDetail": "No key set: requests are sent without Authorization.",
+  "prov.noKeySource": "No key (Authorization omitted)",
 };
 
 export type StringKey = keyof typeof en;

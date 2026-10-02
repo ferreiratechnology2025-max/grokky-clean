@@ -10,9 +10,11 @@ import type {
   ProjectMode,
   ReasoningEffort,
   SandboxMode,
+  SettingsPatch,
 } from "./contracts";
+import { validateOpenAICompatiblePatch } from "./openai-compatible";
 
-const providers = new Set<ProviderId>(["codex", "openrouter"]);
+const providers = new Set<ProviderId>(["codex", "openrouter", "openai-compatible"]);
 const reasoning = new Set<ReasoningEffort>(["low", "medium", "high", "xhigh"]);
 const sandboxModes = new Set<SandboxMode>(["read-only", "workspace-write"]);
 const projectModes = new Set<ProjectMode>(["project", "none"]);
@@ -113,10 +115,10 @@ export function validateConversationPatch(value: unknown): ConversationPatch {
   return patch;
 }
 
-export function validateSettingsPatch(value: unknown): Partial<AppSettings> {
+export function validateSettingsPatch(value: unknown): SettingsPatch {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Invalid settings update");
   const input = value as Record<string, unknown>;
-  const patch: Partial<AppSettings> = {};
+  const patch: SettingsPatch = {};
   if (input.defaultWorkingDirectory !== undefined) {
     if (typeof input.defaultWorkingDirectory !== "string" || input.defaultWorkingDirectory.length > 2_000) throw new Error("Invalid default directory");
     patch.defaultWorkingDirectory = input.defaultWorkingDirectory;
@@ -131,6 +133,7 @@ export function validateSettingsPatch(value: unknown): Partial<AppSettings> {
     if (typeof input.openRouterCredentialPath !== "string" || input.openRouterCredentialPath.length > 2_000) throw new Error("Invalid credential path");
     patch.openRouterCredentialPath = input.openRouterCredentialPath;
   }
+  if (input.openAICompatible !== undefined) patch.openAICompatible = validateOpenAICompatiblePatch(input.openAICompatible);
   if (input.theme !== undefined) {
     if (!themes.has(input.theme as AppSettings["theme"])) throw new Error("Invalid theme");
     patch.theme = input.theme as AppSettings["theme"];

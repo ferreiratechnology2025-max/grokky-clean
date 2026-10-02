@@ -47,6 +47,15 @@ export function registerIpc(controller: MainController): void {
     if (pathname) await controller.updateSettings({ openRouterCredentialPath: pathname });
     return pathname;
   });
+  ipcMain.handle(IPC.credentialChooseCompatible, async () => {
+    const result = await dialog.showOpenDialog({
+      title: "Choose an env file containing the OpenAI-compatible API key",
+      properties: ["openFile", "showHiddenFiles"],
+    });
+    const pathname = result.canceled ? null : result.filePaths[0] ?? null;
+    if (pathname) await controller.updateSettings({ openAICompatible: { credentialPath: pathname } });
+    return pathname;
+  });
   ipcMain.handle(IPC.settingsUpdate, (_event, patch) => controller.updateSettings(validateSettingsPatch(patch)));
   ipcMain.handle(IPC.providersRefresh, () => controller.refreshProviderStatuses());
   ipcMain.handle(IPC.capabilitiesGet, () => controller.getCapabilities());

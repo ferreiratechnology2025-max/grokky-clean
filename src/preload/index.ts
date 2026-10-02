@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from "electron";
-import type { AppSnapshot, AppSettings, ConversationPatch, GrokkyApi } from "../shared/contracts";
+import type { AppSnapshot, ConversationPatch, GrokkyApi, SettingsPatch } from "../shared/contracts";
 import { IPC } from "../shared/contracts";
 import { userFacingError } from "../shared/errors";
 import { PREVIEW_IPC, type WebPreviewApi } from "../main/web-preview-contract";
@@ -24,7 +24,8 @@ const api: GrokkyApi & WebPreviewApi = {
   cancelRun: (conversationId) => invoke(IPC.runCancel, conversationId),
   chooseWorkingDirectory: (conversationId) => invoke(IPC.directoryChoose, conversationId),
   chooseOpenRouterCredential: () => invoke(IPC.credentialChoose),
-  updateSettings: (patch: Partial<AppSettings>) => invoke(IPC.settingsUpdate, patch),
+  chooseOpenAICompatibleCredential: () => invoke(IPC.credentialChooseCompatible),
+  updateSettings: (patch: SettingsPatch) => invoke(IPC.settingsUpdate, patch),
   refreshProviderStatuses: () => invoke(IPC.providersRefresh),
   getCapabilities: () => invoke(IPC.capabilitiesGet),
   setSkillEnabled: (path, enabled) => invoke(IPC.skillToggle, path, enabled),

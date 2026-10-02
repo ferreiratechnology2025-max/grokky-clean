@@ -10,6 +10,7 @@ import type {
   Conversation,
   CrewCommunication,
 } from "../shared/contracts";
+import { defaultOpenAICompatibleSettings, normalizeOpenAICompatibleSettings } from "../shared/openai-compatible";
 
 export interface PersistedRemoteDevice {
   id: string;
@@ -73,6 +74,7 @@ export function defaultPersistentState(homeDirectory: string): PersistentState {
       defaultWorkingDirectory: scratchDirectory,
       recentWorkingDirectories: [],
       openRouterCredentialPath: "",
+      openAICompatible: defaultOpenAICompatibleSettings(),
       theme: "system",
       accentPalette: "lime",
       multiAgentEnabled: true,
@@ -233,7 +235,7 @@ function normalizeConversation(value: unknown, homeDirectory: string): Conversat
   return {
     id: item.id,
     title: item.title,
-    provider: item.provider === "openrouter" ? "openrouter" : "codex",
+    provider: item.provider === "openrouter" || item.provider === "openai-compatible" ? item.provider : "codex",
     model: typeof item.model === "string" ? item.model : "gpt-5.6-sol",
     reasoning: ["low", "medium", "high", "xhigh"].includes(item.reasoning ?? "") ? item.reasoning! : "medium",
     sandboxMode: item.sandboxMode === "read-only" ? "read-only" : "workspace-write",
@@ -307,6 +309,7 @@ export class StateStore {
           openRouterCredentialPath: typeof settings.openRouterCredentialPath === "string"
             ? settings.openRouterCredentialPath
             : "",
+          openAICompatible: normalizeOpenAICompatibleSettings(settings.openAICompatible),
           theme: ["system", "light", "dark"].includes(settings.theme) ? settings.theme : "system",
           accentPalette: typeof settings.accentPalette === "string"
             && ["lime", "electric-blue", "ultraviolet", "solar-amber", "ice"].includes(settings.accentPalette)

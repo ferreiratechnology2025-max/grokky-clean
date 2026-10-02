@@ -54,13 +54,16 @@ import type {
   ComputerCapabilityId,
   Conversation,
   CrewCommunication,
+  AppSettings,
   ProviderId,
+  ProviderStatus,
   ReasoningEffort,
   RunOutcome,
   SandboxMode,
   SkillCapability,
 } from "../../shared/contracts";
 import { CODEX_MODELS } from "../../shared/contracts";
+import { OPENAI_COMPATIBLE_PRESETS, normalizeOpenAICompatibleSettings, type OpenAICompatiblePresetId } from "../../shared/openai-compatible";
 import { requiresDevelopmentCommands, requiresProjectDirectory } from "../../shared/run-preflight";
 import { botVariantAt, botVariantForIdentity, type BotVariant } from "./bot-identity";
 import { ModelCombobox, SelectMenu, type SelectChoice } from "./Controls";
@@ -297,7 +300,8 @@ function compactPath(pathname: string): string {
 }
 
 function providerName(provider: ProviderId): string {
-  return provider === "codex" ? "Codex" : "OpenRouter";
+  if (provider === "codex") return "Codex";
+  return provider === "openai-compatible" ? "OpenAI Compatible" : "OpenRouter";
 }
 
 function InlineLoader({ label = t("crew.working"), quiet = false }: { label?: string; quiet?: boolean }) {
@@ -716,7 +720,7 @@ function CrewPicker({ conversation, agents, enabled, maxAgents, onOpenAgents, on
       </button>
       {open && (
         <div className="crew-picker-popover" role="dialog" aria-label={t("crew.choose")}>
-          <header><strong>{t("crew.choose")}</strong><small>{conversation.provider === "openrouter" ? t("crew.agnesHint") : t("crew.codexHint")}</small></header>
+          <header><strong>{t("crew.choose")}</strong><small>{conversation.provider === "codex" ? t("crew.codexHint") : t("crew.agnesHint")}</small></header>
           {!enabled && <div className="crew-picker-warning"><WarningCircle size={15} />{t("crew.disabled")}</div>}
           <div className="crew-picker-list">
             {available.map((agent) => {
@@ -995,6 +999,87 @@ function Composer({ conversation, agents, recentDirectories, multiAgentEnabled, 
         <span className={`web-access-status ${webSearchEnabled ? "enabled" : ""}`} title={webSearchEnabled ? t("composer.webOnTitle") : t("composer.webOffTitle")}><GlobeHemisphereWest size={12} />{webSearchEnabled ? t("composer.webOn") : t("composer.webOff")}</span>
         <span>{t("composer.enter")}</span>
       </div>
+    </div>
+  );
+}
+
+function CompatibleSettings({ settings, status, disabled, onPatch, onChooseCredential }: {
+  settings: NonNullable<AppSettings["openAICompatible"]>;
+  status: ProviderStatus | undefined;
+  disabled: boolean;
+  onPatch(patch: Partial<NonNullable<AppSettings["openAICompatible"]>>): Promise<void>;
+  onChooseCredential(): void;
+}) {
+  useStrings();
+  const preset = OPENAI_COMPATIBLE_PRESETS[settings.preset];
+  const [endpoint, setEndpoint] = useState(settings.baseUrl);
+  const [model, setModel] = useState(settings.model);
+  const [error, setError] = useState("");
+  useEffect(() => setEndpoint(settings.baseUrl), [settings.baseUrl]);
+  useEffect(() => setModel(settings.model), [settings.model]);
+  const choices: Array<SelectChoice<OpenAICompatiblePresetId>> = [
+    { value: "agnes", label: t("set.compat.presetAgnes") },
+    { value: "custom", label: t("set.compat.presetCustom") },
+  ];
+  const patch = (value: Partial<NonNullable<AppSettings["openAICompatible"]>>) => {
+    onPatch(value).then(
+      () => setError(""),
+      (failure: unknown) => {
+        setError(failure instanceof Error ? failure.message : t("prov.changeFailed"));
+        setEndpoint(settings.baseUrl);
+        setModel(settings.model);
+      },
+    );
+  };
+  let host = "";
+  try {
+    host = new URL(settings.baseUrl || preset.baseUrl).host;
+  } catch {
+    host = "";
+  }
+  const statusLine = status?.ready
+    ? t("set.compat.statusReady", { source: tr(status.source), host: host || "-" })
+    : t("set.compat.statusNotReady", { detail: tr(status?.detail ?? "") });
+  return (
+    <div className="compat-settings">
+      <div className="settings-row path-setting">
+        <span className="settings-row-icon"><Robot size={18} /></span>
+        <span className="settings-copy"><strong>{t("set.compat.preset")}</strong></span>
+        <SelectMenu value={settings.preset} choices={choices} label={t("set.compat.presetAria")} compact disabled={disabled} onChange={(next) => patch({ preset: next })} />
+      </div>
+      <label className="agent-field">
+        <span>{t("set.compat.endpoint")}</span>
+        <input
+          value={preset.endpointEditable ? endpoint : preset.baseUrl}
+          readOnly={!preset.endpointEditable}
+          disabled={disabled}
+          placeholder="https://host/v1"
+          spellCheck={false}
+          onChange={(event) => setEndpoint(event.target.value)}
+          onBlur={() => { if (preset.endpointEditable && endpoint.trim() !== settings.baseUrl) patch({ baseUrl: endpoint }); }}
+          onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }}
+        />
+      </label>
+      <p className="settings-note">{preset.endpointEditable ? t("set.compat.endpointHint") : t("set.compat.endpointFixed")}</p>
+      <label className="agent-field">
+        <span>{t("set.compat.model")}</span>
+        <input
+          value={model}
+          disabled={disabled}
+          placeholder={preset.defaultModel}
+          spellCheck={false}
+          onChange={(event) => setModel(event.target.value)}
+          onBlur={() => { if (model.trim() !== settings.model) patch({ model: model.trim() }); }}
+          onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }}
+        />
+      </label>
+      <button className="settings-row path-setting" type="button" disabled={disabled} onClick={onChooseCredential}>
+        <span className="settings-row-icon"><Robot size={18} /></span>
+        <span className="settings-copy"><strong>{t("set.compat.credential", { name: preset.credentialEnvVar })}</strong><small>{settings.credentialPath || t("set.chooseEnv")}</small></span>
+        <ArrowUpRight size={15} />
+      </button>
+      <p className="settings-note">{statusLine}</p>
+      {error && <p className="settings-note compat-error" role="alert">{error}</p>}
     </div>
   );
 }
@@ -1289,6 +1374,15 @@ function SettingsDialog({ snapshot, conversation, agents, initialTab, onAgentsCh
                     <span className="settings-copy"><strong>{t("set.openRouterCredential")}</strong><small>{snapshot.settings.openRouterCredentialPath || t("set.chooseEnv")}</small></span>
                     <ArrowUpRight size={15} />
                   </button>
+                )}
+                {conversation.provider === "openai-compatible" && (
+                  <CompatibleSettings
+                    settings={normalizeOpenAICompatibleSettings(snapshot.settings.openAICompatible)}
+                    status={snapshot.providerStatuses.find((status) => status.id === "openai-compatible")}
+                    disabled={conversation.status === "running"}
+                    onPatch={(openAICompatible) => window.grokky.updateSettings({ openAICompatible })}
+                    onChooseCredential={() => void window.grokky.chooseOpenAICompatibleCredential()}
+                  />
                 )}
                 {conversation.usage && (
                   <div className="usage-summary">
@@ -1771,12 +1865,15 @@ export function App() {
               <div className="provider-switch" aria-label={t("hdr.provider")}>
                 <button type="button" aria-pressed={active.provider === "codex"} className={active.provider === "codex" ? "active" : ""} onClick={() => void updateProvider("codex")}><span aria-hidden="true" />Codex</button>
                 <button type="button" aria-pressed={active.provider === "openrouter"} className={active.provider === "openrouter" ? "active" : ""} onClick={() => void updateProvider("openrouter")}><span aria-hidden="true" />OpenRouter</button>
+                <button type="button" aria-pressed={active.provider === "openai-compatible"} className={active.provider === "openai-compatible" ? "active" : ""} onClick={() => void updateProvider("openai-compatible")}><span aria-hidden="true" />OpenAI Compatible</button>
               </div>
               <i className="toolbar-separator" aria-hidden="true" />
               <div className="toolbar-field model-field">
                 <Robot size={15} weight="duotone" />
                 {active.provider === "codex" ? (
                   <SelectMenu value={active.model} choices={CODEX_MODEL_CHOICES} label={t("hdr.codexModel")} compact disabled={active.status === "running"} onChange={(model) => void window.grokky.updateConversation(active.id, { model }).catch((error) => setUiError(error.message))} />
+                ) : active.provider === "openai-compatible" ? (
+                  <ModelCombobox value={active.model} suggestions={[...OPENAI_COMPATIBLE_PRESETS[normalizeOpenAICompatibleSettings(snapshot.settings.openAICompatible).preset].modelSuggestions]} label={t("hdr.compatModel")} disabled={active.status === "running"} onCommit={(model) => void window.grokky.updateConversation(active.id, { model }).catch((error) => setUiError(error.message))} />
                 ) : (
                   <ModelCombobox value={active.model} suggestions={OPENROUTER_SUGGESTIONS} label={t("hdr.openRouterModel")} disabled={active.status === "running"} onCommit={(model) => void window.grokky.updateConversation(active.id, { model }).catch((error) => setUiError(error.message))} />
                 )}

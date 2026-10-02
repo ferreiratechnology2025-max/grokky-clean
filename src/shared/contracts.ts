@@ -1,4 +1,6 @@
-export type ProviderId = "codex" | "openrouter";
+import type { OpenAICompatibleSettings } from "./openai-compatible";
+
+export type ProviderId = "codex" | "openrouter" | "openai-compatible";
 export type ReasoningEffort = "low" | "medium" | "high" | "xhigh";
 export type SandboxMode = "read-only" | "workspace-write";
 export type RunStatus = "idle" | "running" | "error";
@@ -138,6 +140,7 @@ export interface AppSettings {
   defaultWorkingDirectory: string;
   recentWorkingDirectories: string[];
   openRouterCredentialPath: string;
+  openAICompatible?: OpenAICompatibleSettings;
   theme: "system" | "light" | "dark";
   accentPalette?: AccentPalette;
   multiAgentEnabled: boolean;
@@ -262,6 +265,10 @@ export interface ConversationPatch {
   selectedAgentIds?: string[];
 }
 
+export type SettingsPatch = Omit<Partial<AppSettings>, "openAICompatible"> & {
+  openAICompatible?: Partial<OpenAICompatibleSettings>;
+};
+
 export interface GrokkyApi {
   getSnapshot(): Promise<AppSnapshot>;
   createConversation(): Promise<string>;
@@ -272,7 +279,8 @@ export interface GrokkyApi {
   cancelRun(conversationId: string): Promise<void>;
   chooseWorkingDirectory(conversationId: string): Promise<string | null>;
   chooseOpenRouterCredential(): Promise<string | null>;
-  updateSettings(patch: Partial<AppSettings>): Promise<void>;
+  chooseOpenAICompatibleCredential(): Promise<string | null>;
+  updateSettings(patch: SettingsPatch): Promise<void>;
   refreshProviderStatuses(): Promise<void>;
   getCapabilities(): Promise<CapabilitiesSnapshot>;
   setSkillEnabled(path: string, enabled: boolean): Promise<CapabilitiesSnapshot>;
@@ -306,6 +314,7 @@ export const IPC = {
   runCancel: "grokky:run:cancel",
   directoryChoose: "grokky:directory:choose",
   credentialChoose: "grokky:credential:choose",
+  credentialChooseCompatible: "grokky:credential:choose-compatible",
   settingsUpdate: "grokky:settings:update",
   providersRefresh: "grokky:providers:refresh",
   capabilitiesGet: "grokky:capabilities:get",

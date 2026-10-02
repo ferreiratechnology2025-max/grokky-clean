@@ -17,20 +17,41 @@ import type {
   ComputerCapabilityId,
   Conversation,
   ConversationPatch,
+  ProviderId,
   ProviderStatus,
   RunOutcome,
+  SettingsPatch,
 } from "../shared/contracts";
 import { CODEX_MODELS, DEFAULT_OPENROUTER_MODEL, IPC } from "../shared/contracts";
+import {
+  OPENAI_COMPATIBLE_PRESETS,
+  defaultOpenAICompatibleModel,
+  mergeOpenAICompatibleSettings,
+  normalizeOpenAICompatibleSettings,
+} from "../shared/openai-compatible";
 import { requiresDevelopmentCommands, requiresProjectDirectory } from "../shared/run-preflight";
 import { CapabilitiesService } from "./capabilities";
 import { AgentService } from "./agents";
 import { capabilityForTool, ComputerAccessService, newAuditId, targetForTool, type ComputerToolName } from "./computer-access";
 import { providerStatuses, resolveOpenRouterCredential } from "./credentials";
+import { openAICompatibleStatus, resolveOpenAICompatibleCredential } from "./openai-compatible-credentials";
 import { runCodex } from "./providers/codex-provider";
 import { runOpenRouter } from "./providers/openrouter-provider";
+import { runOpenAICompatible } from "./providers/openai-compatible-provider";
 import type { ProviderEvent } from "./providers/types";
 import { communicationsFromOrchestrationEvent, mergeCrewCommunications } from "./crew-communications";
 import { noProjectDirectory, StateStore, type PersistentState } from "./state-store";
+
+export function defaultModelFor(provider: ProviderId, settings: AppSettings): string {
+  switch (provider) {
+    case "codex":
+      return CODEX_MODELS[0];
+    case "openrouter":
+      return DEFAULT_OPENROUTER_MODEL;
+    case "openai-compatible":
+      return defaultOpenAICompatibleModel(settings.openAICompatible);
+  }
+}
 
 function id(): string {
   return randomUUID().replaceAll("-", "");
@@ -168,7 +189,7 @@ export class MainController {
     }
     if (nextPatch.provider && nextPatch.provider !== conversation.provider) {
       conversation.threadId = undefined;
-      conversation.model = nextPatch.provider === "codex" ? CODEX_MODELS[0] : DEFAULT_OPENROUTER_MODEL;
+      conversation.model = defaultModelFor(nextPatch.provider, this.state.settings);
     }
     if (
       (nextPatch.projectMode !== undefined && nextPatch.projectMode !== conversation.projectMode)
@@ -239,8 +260,12 @@ export class MainController {
     await this.commit();
   }
 
-  async updateSettings(patch: Partial<AppSettings>): Promise<void> {
-    Object.assign(this.state.settings, patch);
+  async updateSettings(patch: SettingsPatch): Promise<void> {
+    const { openAICompatible, ...rest } = patch;
+    Object.assign(this.state.settings, rest);
+    if (openAICompatible) {
+      this.state.settings.openAICompatible = mergeOpenAICompatibleSettings(this.state.settings.openAICompatible, openAICompatible);
+    }
     await this.refreshProviderStatuses(false);
     await this.commit();
   }
@@ -317,7 +342,10 @@ export class MainController {
   }
 
   async refreshProviderStatuses(publish = true): Promise<void> {
-    this.statuses = await providerStatuses(this.state.settings, this.homeDirectory);
+    this.statuses = [
+      ...(await providerStatuses(this.state.settings, this.homeDirectory)),
+      await openAICompatibleStatus(this.state.settings.openAICompatible, this.homeDirectory),
+    ];
     if (publish) await this.commit();
   }
 
@@ -371,10 +399,18 @@ export class MainController {
       this.runAgentIcons.set(conversationId, new Map(agents.flatMap((agent) => agent.icon ? [[agent.name.toLowerCase(), agent.icon] as const] : [])));
       if (conversation.provider === "codex") {
         await runCodex({ conversation, settings, agents, prompt, signal: controller.signal, computerAccess, executeTool, onEvent });
-      } else {
+      } else if (conversation.provider === "openrouter") {
         const credential = await resolveOpenRouterCredential(this.state.settings, this.homeDirectory);
         if (!credential) throw new Error("OpenRouter credential is unavailable");
         await runOpenRouter({ conversation, settings, agents, prompt, signal: controller.signal, computerAccess, executeTool, onEvent, apiKey: credential.apiKey });
+      } else if (conversation.provider === "openai-compatible") {
+        const compatible = normalizeOpenAICompatibleSettings(this.state.settings.openAICompatible);
+        const preset = OPENAI_COMPATIBLE_PRESETS[compatible.preset];
+        const credential = await resolveOpenAICompatibleCredential(compatible, this.homeDirectory);
+        if (!credential && preset.requiresKey) throw new Error(`${preset.label} API key is unavailable`);
+        await runOpenAICompatible({ conversation, settings, agents, prompt, signal: controller.signal, computerAccess, executeTool, onEvent, ...(credential ? { apiKey: credential.apiKey } : {}) });
+      } else {
+        throw new Error(`Unsupported provider: ${String(conversation.provider)}`);
       }
       const current = this.state.conversations.find((item) => item.id === conversationId);
       if (current && this.runs.get(conversationId) === controller) {
