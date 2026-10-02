@@ -2,6 +2,9 @@ import { spawn } from "node:child_process";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { createRequire } from "node:module";
+
+const require = createRequire(import.meta.url);
 
 const userData = process.env.GROKKY_SMOKE_USER_DATA_PATH || await mkdtemp(join(tmpdir(), "grokky-electron-smoke-"));
 const screenshotPath = process.env.GROKKY_SMOKE_SCREENSHOT_PATH;
@@ -9,7 +12,7 @@ const screenshotView = process.env.GROKKY_SMOKE_VIEW;
 const screenshotWidth = process.env.GROKKY_SMOKE_WIDTH;
 const screenshotHeight = process.env.GROKKY_SMOKE_HEIGHT;
 const layoutAssert = process.env.GROKKY_SMOKE_LAYOUT_ASSERT;
-const electronPath = join(process.cwd(), "node_modules", ".bin", "electron");
+const electronPath = require("electron");
 const child = spawn(electronPath, ["."], {
   cwd: process.cwd(),
   env: {
