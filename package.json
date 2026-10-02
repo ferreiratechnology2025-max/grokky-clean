@@ -11,6 +11,7 @@
     "node": ">=20.19.0"
   },
   "scripts": {
+    "predev": "node -e \"require('electron')\"",
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "typecheck": "tsc --noEmit",
