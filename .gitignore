@@ -27,3 +27,16 @@ build/icon.iconset/
 build/icon-lettermark.png
 build/icon.png
 build/icon.svg
+*.env
+__pycache__/
+*.pyc
+.venv/
+*.sqlite
+*.sqlite3
+dist/
+build/
+*.gguf
+*.onnx
+venv/
+.idea/
+.vscode/
