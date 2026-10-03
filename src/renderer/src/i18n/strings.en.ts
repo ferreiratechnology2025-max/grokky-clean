@@ -422,6 +422,12 @@ export const en = {
   "prov.customMissingDetail": "Enter an https endpoint, or http for localhost.",
   "prov.customNoKeyDetail": "No key set: requests are sent without Authorization.",
   "prov.noKeySource": "No key (Authorization omitted)",
+  "set.credConfigured": "Configured",
+  "set.credNotConfigured": "Not configured",
+  "set.credChooseEnvFile": "Choose a .env file",
+  "set.credFileNoKey": "Credential not found in this file",
+  "prov.orFileNoKeyDetail": "Credential not found in this file.",
+  "prov.processEnvSource": "Process environment",
 };
 
 export type StringKey = keyof typeof en;

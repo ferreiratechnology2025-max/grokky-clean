@@ -424,4 +424,10 @@ export const ptBR: Record<StringKey, string> = {
   "prov.customMissingDetail": "Informe um endpoint https, ou http para localhost.",
   "prov.customNoKeyDetail": "Sem chave: as requisições são enviadas sem Authorization.",
   "prov.noKeySource": "Sem chave (Authorization omitido)",
+  "set.credConfigured": "Configurada",
+  "set.credNotConfigured": "N\u00e3o configurada",
+  "set.credChooseEnvFile": "Escolher arquivo .env",
+  "set.credFileNoKey": "Credencial n\u00e3o encontrada neste arquivo",
+  "prov.orFileNoKeyDetail": "Credencial n\u00e3o encontrada neste arquivo.",
+  "prov.processEnvSource": "Vari\u00e1vel de ambiente do processo",
 };

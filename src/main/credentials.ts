@@ -80,10 +80,12 @@ export async function providerStatuses(settings: AppSettings, homeDirectory: str
       id: "openrouter",
       ready: Boolean(openRouter),
       label: openRouter ? "OpenRouter configured" : "OpenRouter key missing",
-      source: openRouter?.source ?? "No credential source found",
+      source: openRouter?.source ?? (settings.openRouterCredentialPath || "No credential source found"),
       detail: openRouter
         ? "The key stays in the Electron main process."
-        : "Choose an env file containing OPENROUTER_API_KEY.",
+        : settings.openRouterCredentialPath
+          ? "Credential not found in this file."
+          : "Choose an env file containing OPENROUTER_API_KEY.",
     },
   ];
 }

@@ -1,4 +1,6 @@
 import { dialog, ipcMain, shell } from "electron";
+import { homedir } from "node:os";
+import { openRouterCredentialDialogOptions } from "./credential-dialog";
 import type { MainController } from "./controller";
 import { IPC } from "../shared/contracts";
 import { registerWebPreviewIpc } from "./web-preview";
@@ -39,10 +41,8 @@ export function registerIpc(controller: MainController): void {
     return pathname;
   });
   ipcMain.handle(IPC.credentialChoose, async () => {
-    const result = await dialog.showOpenDialog({
-      title: "Choose an env file containing OPENROUTER_API_KEY",
-      properties: ["openFile", "showHiddenFiles"],
-    });
+    const options = await openRouterCredentialDialogOptions(controller.snapshot().settings.openRouterCredentialPath, homedir());
+    const result = await dialog.showOpenDialog(options);
     const pathname = result.canceled ? null : result.filePaths[0] ?? null;
     if (pathname) await controller.updateSettings({ openRouterCredentialPath: pathname });
     return pathname;

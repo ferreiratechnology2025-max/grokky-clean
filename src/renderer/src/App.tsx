@@ -1003,6 +1003,20 @@ function Composer({ conversation, agents, recentDirectories, multiAgentEnabled, 
   );
 }
 
+function OpenRouterCredentialRow({ status, chosenPath }: { status: ProviderStatus | undefined; chosenPath: string }) {
+  useStrings();
+  const state = status?.ready ? "configured" : chosenPath ? "missing-key" : "none";
+  const label = state === "configured" ? t("set.credConfigured") : state === "missing-key" ? t("set.credFileNoKey") : t("set.credNotConfigured");
+  const where = state === "configured" ? tr(status?.source ?? "") : chosenPath || t("set.credChooseEnvFile");
+  return (
+    <button className="settings-row path-setting" type="button" data-credential-state={state} onClick={() => void window.grokky.chooseOpenRouterCredential()}>
+      <span className="settings-row-icon"><Robot size={18} /></span>
+      <span className="settings-copy"><strong>{t("set.openRouterCredential")}</strong><small>{label}{" \u00b7 "}{where}</small></span>
+      <ArrowUpRight size={15} />
+    </button>
+  );
+}
+
 function CompatibleSettings({ settings, status, disabled, onPatch, onChooseCredential }: {
   settings: NonNullable<AppSettings["openAICompatible"]>;
   status: ProviderStatus | undefined;
@@ -1369,11 +1383,10 @@ function SettingsDialog({ snapshot, conversation, agents, initialTab, onAgentsCh
                 </div>
                 <p className="settings-note">{t("set.webSearchNote")}</p>
                 {conversation.provider === "openrouter" && (
-                  <button className="settings-row path-setting" type="button" onClick={() => void window.grokky.chooseOpenRouterCredential()}>
-                    <span className="settings-row-icon"><Robot size={18} /></span>
-                    <span className="settings-copy"><strong>{t("set.openRouterCredential")}</strong><small>{snapshot.settings.openRouterCredentialPath || t("set.chooseEnv")}</small></span>
-                    <ArrowUpRight size={15} />
-                  </button>
+                  <OpenRouterCredentialRow
+                    status={snapshot.providerStatuses.find((status) => status.id === "openrouter")}
+                    chosenPath={snapshot.settings.openRouterCredentialPath}
+                  />
                 )}
                 {conversation.provider === "openai-compatible" && (
                   <CompatibleSettings
